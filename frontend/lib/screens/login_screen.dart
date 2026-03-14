@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_provider.dart';
+import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -70,7 +71,47 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) setState(() => _loading = false);
     }
   }
-
+  Future<void> _showForgotPasswordDialog() async {
+  final emailCtrl = TextEditingController();
+  await showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Reset Password'),
+      content: TextField(
+        controller: emailCtrl,
+        decoration: const InputDecoration(labelText: 'Your email'),
+        keyboardType: TextInputType.emailAddress,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final email = emailCtrl.text.trim();
+            if (email.isEmpty) return;
+            Navigator.pop(ctx);
+            setState(() => _loading = true);
+            try {
+              await ApiService.forgotPassword(email);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('If that email exists, a reset link was sent.'),
+                ));
+              }
+            } catch (e) {
+              if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+            } finally {
+              if (mounted) setState(() => _loading = false);
+            }
+          },
+          child: const Text('Send Reset Link'),
+        ),
+      ],
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -157,6 +198,13 @@ class _LoginScreenState extends State<LoginScreen>
             decoration: const InputDecoration(labelText: 'Password'),
             obscureText: true,
             validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _showForgotPasswordDialog,
+              child: const Text('Forgot password?'),
+            ),
           ),
         ],
       ),

@@ -3,13 +3,13 @@ import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/reset_password_screen.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 void main() {
+  usePathUrlStrategy();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
-      child: const ReApp(),
-    ),
+    ChangeNotifierProvider(create: (_) => AuthProvider(), child: const ReApp()),
   );
 }
 
@@ -28,7 +28,21 @@ class ReApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const _RootRouter(),
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        // Flutter Web calls this with the actual browser path on first load
+        if (settings.name != null &&
+            settings.name!.startsWith('/reset-password')) {
+          return MaterialPageRoute(
+            builder: (_) => const ResetPasswordScreen(),
+            settings: settings,
+          );
+        }
+        return MaterialPageRoute(
+          builder: (_) => const _RootRouter(),
+          settings: settings,
+        );
+      },
     );
   }
 }

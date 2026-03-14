@@ -29,7 +29,25 @@ class ApiService {
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
+static Future<void> forgotPassword(String email) async {
+  final res = await http.post(
+    Uri.parse('$baseUrl/auth/forgot-password'),
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'email': email}),
+  );
+  final body = jsonDecode(res.body);
+  if (res.statusCode != 200) throw Exception(body['error'] ?? 'Request failed');
+}
 
+static Future<void> resetPassword(String token, String newPassword) async {
+  final res = await http.post(
+    Uri.parse('$baseUrl/auth/reset-password'),
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'token': token, 'newPassword': newPassword}),
+  );
+  final body = jsonDecode(res.body);
+  if (res.statusCode != 200) throw Exception(body['error'] ?? 'Reset failed');
+}
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> login(String email, String password) async {
