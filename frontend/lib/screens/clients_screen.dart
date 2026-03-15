@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'client_form_screen.dart';
-import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 
 class ClientsScreen extends StatefulWidget {
@@ -33,19 +32,19 @@ class _ClientsScreenState extends State<ClientsScreen> {
   }
 
   Future<void> _markReplied(dynamic client) async {
-    final l10n = AppLocalizations.of(context)!;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(l10n.markAsReplied),
-        content: Text(l10n.markAsRepliedConfirm(client["name"])),
+        title: const Text('Mark as replied'),
+        content: Text(
+            'Mark ${client["name"]} as replied?\nAll pending follow-ups will be cancelled.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n.cancel)),
+              child: const Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: Text(l10n.confirm)),
+              child: const Text('Confirm')),
         ],
       ),
     );
@@ -56,26 +55,26 @@ class _ClientsScreenState extends State<ClientsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.error(e.toString()))));
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
 
   Future<void> _deleteClient(dynamic client) async {
-    final l10n = AppLocalizations.of(context)!;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(l10n.deleteClient),
-        content: Text(l10n.deleteClientConfirm(client["name"])),
+        title: const Text('Delete client'),
+        content: Text(
+            'Permanently delete ${client["name"]} and all their messages?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n.cancel)),
+              child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(l10n.delete),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -87,7 +86,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.error(e.toString()))));
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -102,7 +101,6 @@ class _ClientsScreenState extends State<ClientsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -110,7 +108,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
         children: [
           Row(
             children: [
-              Text(l10n.clients,
+              Text('Clients',
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -119,13 +117,13 @@ class _ClientsScreenState extends State<ClientsScreen> {
               OutlinedButton.icon(
                 onPressed: _load,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: Text(l10n.refresh),
+                label: const Text('Refresh'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => _openForm(),
                 icon: const Icon(Icons.add, size: 18),
-                label: Text(l10n.addClient),
+                label: const Text('Add Client'),
               ),
             ],
           ),
@@ -135,20 +133,20 @@ class _ClientsScreenState extends State<ClientsScreen> {
           else if (_error != null)
             Text(_error!, style: const TextStyle(color: Colors.red))
           else if (_clients.isEmpty)
-            Center(
+            const Center(
               child: Text(
-                l10n.noClients,
-                style: const TextStyle(color: Colors.grey),
+                'No clients yet. Click Add Client to get started.',
+                style: TextStyle(color: Colors.grey),
               ),
             )
           else
-            Expanded(child: _buildList(l10n)),
+            Expanded(child: _buildList()),
         ],
       ),
     );
   }
 
-  Widget _buildList(AppLocalizations l10n) {
+  Widget _buildList() {
     return SingleChildScrollView(
       child: Column(
         children: _clients
@@ -157,7 +155,6 @@ class _ClientsScreenState extends State<ClientsScreen> {
                   onEdit: () => _openForm(client: c),
                   onReplied: () => _markReplied(c),
                   onDelete: () => _deleteClient(c),
-                  l10n: l10n,
                 ))
             .toList(),
       ),
@@ -170,14 +167,12 @@ class _ClientRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onReplied;
   final VoidCallback onDelete;
-  final AppLocalizations l10n;
 
   const _ClientRow({
     required this.client,
     required this.onEdit,
     required this.onReplied,
     required this.onDelete,
-    required this.l10n,
   });
 
   @override
@@ -210,12 +205,12 @@ class _ClientRow extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: isActive
-                    ? Colors.green.withValues(alpha: 0.15)
+                    ? Colors.green.withValues (alpha: 0.15)
                     : Colors.grey.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                isActive ? l10n.statusActive : l10n.statusReplied,
+                isActive ? 'Active' : 'Replied',
                 style: TextStyle(
                   fontSize: 12,
                   color: isActive ? Colors.green : Colors.grey,
@@ -238,7 +233,7 @@ class _ClientRow extends StatelessWidget {
             if (isActive)
               IconButton(
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                tooltip: l10n.markAsReplied,
+                tooltip: 'Mark replied',
                 onPressed: onReplied,
               ),
             IconButton(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../l10n/app_localizations.dart';
 import '../services/auth_provider.dart';
 import '../services/api_service.dart';
 
@@ -73,21 +72,20 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
   Future<void> _showForgotPasswordDialog() async {
-  final l10n = AppLocalizations.of(context)!;
   final emailCtrl = TextEditingController();
   await showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text(l10n.resetPassword),
+      title: const Text('Reset Password'),
       content: TextField(
         controller: emailCtrl,
-        decoration: InputDecoration(labelText: l10n.yourEmail),
+        decoration: const InputDecoration(labelText: 'Your email'),
         keyboardType: TextInputType.emailAddress,
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: Text(l10n.cancel),
+          child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: () async {
@@ -98,8 +96,8 @@ class _LoginScreenState extends State<LoginScreen>
             try {
               await ApiService.forgotPassword(email);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(l10n.resetLinkSent),
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('If that email exists, a reset link was sent.'),
                 ));
               }
             } catch (e) {
@@ -108,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen>
               if (mounted) setState(() => _loading = false);
             }
           },
-          child: Text(l10n.sendResetLink),
+          child: const Text('Send Reset Link'),
         ),
       ],
     ),
@@ -116,7 +114,6 @@ class _LoginScreenState extends State<LoginScreen>
 }
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -128,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
               children: [
                 const Text('🏡', style: TextStyle(fontSize: 56)),
                 const SizedBox(height: 12),
-                Text(l10n.appTitle,
+                Text('RE Follow-Up Bot',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold)),
                 const SizedBox(height: 32),
@@ -139,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen>
                       children: [
                         TabBar(
                           controller: _tabs,
-                          tabs: [Tab(text: l10n.signIn), Tab(text: l10n.register)],
+                          tabs: const [Tab(text: 'Sign In'), Tab(text: 'Register')],
                           onTap: (_) => setState(() => _error = null),
                         ),
                         const SizedBox(height: 24),
@@ -147,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen>
                           height: 280,
                           child: TabBarView(
                             controller: _tabs,
-                            children: [_loginForm(l10n), _registerForm(l10n)],
+                            children: [_loginForm(), _registerForm()],
                           ),
                         ),
                         if (_error != null) ...[
@@ -169,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     height: 18,
                                     child: CircularProgressIndicator(strokeWidth: 2),
                                   )
-                                : Text(_tabs.index == 0 ? l10n.signIn : l10n.createAccount),
+                                : Text(_tabs.index == 0 ? 'Sign In' : 'Create Account'),
                           ),
                         ),
                       ],
@@ -184,29 +181,29 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _loginForm(AppLocalizations l10n) {
+  Widget _loginForm() {
     return Form(
       key: _loginFormKey,
       child: Column(
         children: [
           TextFormField(
             controller: _emailCtrl,
-            decoration: InputDecoration(labelText: l10n.email),
+            decoration: const InputDecoration(labelText: 'Email'),
             keyboardType: TextInputType.emailAddress,
-            validator: (v) => (v?.isEmpty ?? true) ? l10n.required : null,
+            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _passCtrl,
-            decoration: InputDecoration(labelText: l10n.password),
+            decoration: const InputDecoration(labelText: 'Password'),
             obscureText: true,
-            validator: (v) => (v?.isEmpty ?? true) ? l10n.required : null,
+            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
           ),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: _showForgotPasswordDialog,
-              child: Text(l10n.forgotPassword),
+              child: const Text('Forgot password?'),
             ),
           ),
         ],
@@ -214,30 +211,30 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _registerForm(AppLocalizations l10n) {
+  Widget _registerForm() {
     return Form(
       key: _registerFormKey,
       child: Column(
         children: [
           TextFormField(
             controller: _nameCtrl,
-            decoration: InputDecoration(labelText: l10n.fullName),
-            validator: (v) => (v?.isEmpty ?? true) ? l10n.required : null,
+            decoration: const InputDecoration(labelText: 'Full name'),
+            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _regEmailCtrl,
-            decoration: InputDecoration(labelText: l10n.email),
+            decoration: const InputDecoration(labelText: 'Email'),
             keyboardType: TextInputType.emailAddress,
-            validator: (v) => (v?.isEmpty ?? true) ? l10n.required : null,
+            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _regPassCtrl,
-            decoration: InputDecoration(labelText: l10n.passwordMinHint),
+            decoration: const InputDecoration(labelText: 'Password (min 8 chars)'),
             obscureText: true,
             validator: (v) =>
-                (v == null || v.length < 8) ? l10n.passwordMinChars : null,
+                (v == null || v.length < 8) ? 'Min 8 characters' : null,
           ),
         ],
       ),

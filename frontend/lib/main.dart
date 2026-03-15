@@ -5,8 +5,6 @@ import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'l10n/app_localizations.dart';
 
 void main() {
   usePathUrlStrategy();
@@ -23,17 +21,6 @@ class ReApp extends StatelessWidget {
     return MaterialApp(
       title: 'RE Follow-Up Bot',
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('en'),
-        Locale('pt'),
-      ],
-      locale: const Locale('pt'),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF5B5BD6),

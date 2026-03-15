@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../l10n/app_localizations.dart';
 import '../services/auth_provider.dart';
 import 'dashboard_screen.dart';
 import 'clients_screen.dart';
@@ -21,12 +20,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final agent = context.watch<AuthProvider>().agent;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('🏡  ${l10n.appTitle}'),
+        title: const Text('🏡  RE Follow-Up Bot'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -39,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: l10n.signOut,
+            tooltip: 'Sign out',
             onPressed: () => context.read<AuthProvider>().logout(),
           ),
         ],
@@ -50,16 +48,16 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIndex: _selectedIndex,
             onDestinationSelected: (i) => setState(() => _selectedIndex = i),
             labelType: NavigationRailLabelType.all,
-            destinations: [
+            destinations: const [
               NavigationRailDestination(
-                icon: const Icon(Icons.dashboard_outlined),
-                selectedIcon: const Icon(Icons.dashboard),
-                label: Text(l10n.dashboard),
+                icon: Icon(Icons.dashboard_outlined),
+                selectedIcon: Icon(Icons.dashboard),
+                label: Text('Dashboard'),
               ),
               NavigationRailDestination(
-                icon: const Icon(Icons.people_outline),
-                selectedIcon: const Icon(Icons.people),
-                label: Text(l10n.clients),
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: Text('Clients'),
               ),
             ],
           ),

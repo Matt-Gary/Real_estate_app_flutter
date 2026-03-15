@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 
 class ClientFormScreen extends StatefulWidget {
@@ -147,10 +146,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? l10n.editClient : l10n.addClient),
+        title: Text(_isEdit ? 'Edit Client' : 'Add Client'),
         actions: [
           TextButton(
             onPressed: _loading ? null : _save,
@@ -159,7 +157,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : Text(l10n.save),
+                : const Text('Save'),
           ),
         ],
       ),
@@ -172,14 +170,14 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _sectionTitle(l10n.clientInformation),
+                    _sectionTitle('Client Information'),
                     const SizedBox(height: 16),
-                    _field(l10n, _nameCtrl,  l10n.fullNameRequired, required: true),
-                    _field(l10n, _phoneCtrl, l10n.whatsappPhoneRequired,
+                    _field(_nameCtrl,  'Full name *', required: true),
+                    _field(_phoneCtrl, 'WhatsApp phone *',
                         hint: '+5511999999999', required: true),
-                    _field(l10n, _emailCtrl, l10n.email, hint: 'client@email.com'),
-                    _field(l10n, _linkCtrl,  l10n.propertyLink, hint: 'https://...'),
-                    _field(l10n, _notesCtrl, l10n.notes, maxLines: 3),
+                    _field(_emailCtrl, 'Email', hint: 'client@email.com'),
+                    _field(_linkCtrl,  'Property link', hint: 'https://...'),
+                    _field(_notesCtrl, 'Notes', maxLines: 3),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(_error!,
@@ -187,17 +185,17 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                               color: Theme.of(context).colorScheme.error)),
                     ],
                     const Divider(height: 48),
-                    _sectionTitle(l10n.followUpMessages),
+                    _sectionTitle('Follow-up Messages'),
                     const SizedBox(height: 4),
                     Text(
-                      l10n.placeholdersHelp,
+                      'Placeholders: {name}  {property_link}  {email}',
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
                           ?.copyWith(color: Colors.grey),
                     ),
                     const SizedBox(height: 16),
-                    ...List.generate(5, (i) => _messageBlock(l10n, i)),
+                    ...List.generate(5, _messageBlock),
                   ],
                 ),
               ),
@@ -217,7 +215,6 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       );
 
   Widget _field(
-    AppLocalizations l10n,
     TextEditingController ctrl,
     String label, {
     String? hint,
@@ -235,13 +232,13 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           border: const OutlineInputBorder(),
         ),
         validator: required
-            ? (v) => (v?.trim().isEmpty ?? true) ? l10n.required : null
+            ? (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null
             : null,
       ),
     );
   }
 
-  Widget _messageBlock(AppLocalizations l10n, int index) {
+  Widget _messageBlock(int index) {
     final fmt = DateFormat('MMM d, yyyy  HH:mm');
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -251,16 +248,16 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              l10n.messageNumber(index + 1),
+              'Message ${index + 1}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _bodyCtrl[index],
               maxLines: 3,
-              decoration: InputDecoration(
-                hintText: l10n.messageBodyHint,
-                border: const OutlineInputBorder(),
+              decoration: const InputDecoration(
+                hintText: 'Message body...',
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -275,7 +272,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => _pickDateTime(index),
-                  child: Text(l10n.change),
+                  child: const Text('Change'),
                 ),
               ],
             ),

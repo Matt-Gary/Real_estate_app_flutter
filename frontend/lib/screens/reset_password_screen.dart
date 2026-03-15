@@ -1,7 +1,6 @@
 // lib/screens/reset_password_screen.dart
 
 import 'package:flutter/material.dart';
-import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -52,7 +51,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -65,7 +63,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 const Text('🏡', style: TextStyle(fontSize: 56)),
                 const SizedBox(height: 12),
                 Text(
-                  l10n.appTitle,
+                  'RE Follow-Up Bot',
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -75,7 +73,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: _success ? _buildSuccess(l10n) : _buildForm(l10n),
+                    child: _success ? _buildSuccess() : _buildForm(),
                   ),
                 ),
               ],
@@ -86,7 +84,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 
-  Widget _buildForm(AppLocalizations l10n) {
+  Widget _buildForm() {
     // Token missing from URL — show a clear error instead of a useless form
     if (_token.isEmpty) {
       return Column(
@@ -94,13 +92,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           Icon(Icons.link_off,
               size: 48, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 16),
-          Text(
-            l10n.invalidResetLink,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          const Text(
+            'Invalid reset link',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Text(
-            l10n.missingResetToken,
+          const Text(
+            'This link is missing a reset token. Please request a new password reset.',
             textAlign: TextAlign.center,
           ),
         ],
@@ -113,7 +111,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            l10n.setNewPassword,
+            'Set new password',
             style: Theme.of(context)
                 .textTheme
                 .titleLarge
@@ -123,18 +121,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SizedBox(height: 24),
           TextFormField(
             controller: _newPassCtrl,
-            decoration: InputDecoration(labelText: l10n.newPassword),
+            decoration: const InputDecoration(labelText: 'New password'),
             obscureText: true,
             validator: (v) =>
-                (v == null || v.length < 8) ? l10n.passwordMinChars : null,
+                (v == null || v.length < 8) ? 'Min 8 characters' : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _confirmPassCtrl,
-            decoration: InputDecoration(labelText: l10n.confirmNewPassword),
+            decoration: const InputDecoration(labelText: 'Confirm new password'),
             obscureText: true,
             validator: (v) =>
-                v != _newPassCtrl.text ? l10n.passwordsDoNotMatch : null,
+                v != _newPassCtrl.text ? 'Passwords do not match' : null,
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -153,26 +151,26 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(l10n.resetPassword),
+                : const Text('Reset Password'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSuccess(AppLocalizations l10n) {
+  Widget _buildSuccess() {
     return Column(
       children: [
         Icon(Icons.check_circle_outline,
             size: 56, color: Theme.of(context).colorScheme.primary),
         const SizedBox(height: 16),
-        Text(
-          l10n.passwordUpdated,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        const Text(
+          'Password updated!',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        Text(
-          l10n.passwordChangedSuccess,
+        const Text(
+          'Your password has been changed. You can now sign in.',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -188,7 +186,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             }
             Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
           },
-          child: Text(l10n.goToSignIn),
+          child: const Text('Go to Sign In'),
         ),
       ],
     );

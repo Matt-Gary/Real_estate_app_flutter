@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -35,19 +34,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _sendNow() async {
     setState(() => _sending = true);
     try {
-      final l10n = AppLocalizations.of(context)!;
       final res = await ApiService.sendNow();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.sentMessages(res['sent']))),
+          SnackBar(content: Text('Sent ${res['sent']} message(s)')),
         );
       }
       await _load();
     } catch (e) {
       if (mounted) {
-        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.error(e.toString()))),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     } finally {
@@ -57,7 +54,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -65,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(
             children: [
-              Text(l10n.dashboard,
+              Text('Dashboard',
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -74,7 +70,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               OutlinedButton.icon(
                 onPressed: _loading ? null : _load,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: Text(l10n.refresh),
+                label: const Text('Refresh'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
@@ -85,7 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.send, size: 18),
-                label: Text(l10n.sendNow),
+                label: const Text('Send Now'),
                 style: FilledButton.styleFrom(backgroundColor: Colors.green[700]),
               ),
             ],
@@ -93,25 +89,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
           if (_loading) const Center(child: CircularProgressIndicator())
           else if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red))
-          else if (_stats != null) _buildStats(l10n),
+          else if (_stats != null) _buildStats(),
         ],
       ),
     );
   }
 
-  Widget _buildStats(AppLocalizations l10n) {
+  Widget _buildStats() {
     final s = _stats!;
     final waState = (s['waStatus']?['instance']?['state'] ??
         s['waStatus']?['state'] ?? 'unknown') as String;
     final waColor = waState == 'open' ? Colors.green : Colors.red;
 
     final statCards = [
-      _StatData(l10n.totalClients, s['total'],     const Color(0xFF7F77DD)),
-      _StatData(l10n.active,        s['active'],    Colors.green),
-      _StatData(l10n.replied,       s['replied'],   Colors.grey),
-      _StatData(l10n.msgsSent,     s['sent'],      const Color(0xFF3B8BD4)),
-      _StatData(l10n.pending,       s['pending'],   Colors.orange),
-      _StatData(l10n.failed,        s['failed'],    Colors.red),
+      _StatData('Total Clients', s['total'],     const Color(0xFF7F77DD)),
+      _StatData('Active',        s['active'],    Colors.green),
+      _StatData('Replied',       s['replied'],   Colors.grey),
+      _StatData('Msgs Sent',     s['sent'],      const Color(0xFF3B8BD4)),
+      _StatData('Pending',       s['pending'],   Colors.orange),
+      _StatData('Failed',        s['failed'],    Colors.red),
     ];
 
     return Column(
@@ -125,16 +121,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 32),
         Row(
           children: [
-            Text(l10n.whatsappStatus, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const Text('WhatsApp: ', style: TextStyle(fontWeight: FontWeight.bold)),
             Icon(Icons.circle, size: 12, color: waColor),
             const SizedBox(width: 6),
             Text(waState, style: TextStyle(color: waColor)),
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          l10n.schedulerRunning,
-          style: const TextStyle(color: Colors.grey),
+        const Text(
+          'Scheduler: running — fires automatically when messages are due.',
+          style: TextStyle(color: Colors.grey),
         ),
       ],
     );
