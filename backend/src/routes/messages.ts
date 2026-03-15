@@ -50,13 +50,33 @@ router.put('/clients/:clientId/messages', async (req: Request, res: Response) =>
 
   if (!client) { res.status(404).json({ error: 'Client not found' }); return; }
 
-  const rows = messages.map(m => ({
-    client_id: req.params.clientId,
-    seq:       m.seq,
-    body:      m.body,
-    send_at:   m.send_at,
-    status:    'pending' as const,
-  }));
+  // Fetch existing messages to preserve their current status
+  const { data: existing } = await supabase
+    .from('follow_up_messages')
+    .select('seq, status')
+    .eq('client_id', req.params.clientId);
+
+  const existingStatus: Record<number, string> = {};
+  for (const m of (existing ?? [])) {
+    existingStatus[m.seq] = m.status;
+  }
+
+  const rows = messages.map(m => {
+    const currentStatus = existingStatus[m.seq];
+    // If already sent or cancelled, preserve that status
+    // Only set pending if it's a new message or was previously pending/failed
+    const status = (currentStatus === 'sent' || currentStatus === 'cancelled')
+      ? currentStatus
+      : 'pending';
+
+    return {
+      client_id: req.params.clientId,
+      seq: m.seq,
+      body: m.body,
+      send_at: m.send_at,
+      status,
+    };
+  });
 
   const { data, error } = await supabase
     .from('follow_up_messages')
