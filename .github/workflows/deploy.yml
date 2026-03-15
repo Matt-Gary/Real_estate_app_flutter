@@ -17,36 +17,21 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          ENV_FILE: ${{ secrets.ENV }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          envs: ENV_FILE
           script: |
             cd /var/www/real_estate_app/repo
-
-            # Pull latest code
             git pull origin main
-
             cd backend
-
-            # Write .env from GitHub secret
-            cat > .env << 'ENVEOF'
-            ${{ secrets.ENV }}
-            ENVEOF
-
-            # Install dependencies
+            echo "$ENV_FILE" > .env
             npm install
-
-            # Build TypeScript
             npm run build
-
-            # Restart PM2
             pm2 restart real_estate_backend
-
-            # Health check
             sleep 3
             curl -f http://127.0.0.1:3001/health
-git add .github/workflows/deploy-backend.yml
-git commit -m "Add backend deploy workflow"
-git push origin main
