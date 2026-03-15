@@ -33,6 +33,6 @@ jobs:
             echo "$ENV_FILE" > .env
             npm install
             npm run build
-            pm2 restart real_estate_backend
+            pm2 restart real_estate_backend --update-env
             sleep 3
             curl -f http://127.0.0.1:3001/health
