@@ -98,7 +98,7 @@ const OVERDUE_GRACE = 5_000;         // wait 5s after wake-up before sending
 async function tick() {
   if (!_running) return;
 
-  try {
+  try {    
     // 1. Send anything that's due right now
     const messages = await fetchPendingDueMessages();
     if (messages.length > 0) {
@@ -112,12 +112,10 @@ async function tick() {
     let sleepMs: number;
 
     if (!nextAt) {
-      // No future messages — check again in 1 hour
       sleepMs = MAX_SLEEP_MS;
       console.log('[Scheduler] No upcoming messages. Sleeping 1 hour.');
     } else {
       const msUntilNext = nextAt.getTime() - Date.now();
-      // Add a small grace period so we don't wake up 1ms too early
       sleepMs = Math.max(MIN_SLEEP_MS, msUntilNext + OVERDUE_GRACE);
       console.log(`[Scheduler] Next message at ${nextAt.toISOString()} — sleeping ${Math.round(sleepMs / 1000)}s.`);
     }
@@ -127,7 +125,6 @@ async function tick() {
 
   } catch (err) {
     console.error('[Scheduler] Error:', err);
-    // On error, retry in 1 minute
     _timer = setTimeout(tick, 60_000);
   }
 }
