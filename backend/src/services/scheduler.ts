@@ -1,13 +1,10 @@
-import cron from 'node-cron';
 import { supabase } from './supabase';
 import { sendTextMessage, formatMessage } from './evolution';
 
-// Mirrors Python scheduler.py — smart scheduling:
-// processes due messages and logs every attempt.
+let _timer: NodeJS.Timeout | null = null;
+let _running = false;
 
-let cronJob: cron.ScheduledTask | null = null;
-
-// ── Core send logic (mirrors Python _send_batch) ──────────────────────────────
+// ── Core logic (unchanged) ────────────────────────────────────────────────────
 
 async function fetchPendingDueMessages() {
   const now = new Date().toISOString();
@@ -19,12 +16,10 @@ async function fetchPendingDueMessages() {
     .order('send_at');
 
   if (error) throw new Error(`fetchPendingDueMessages: ${error.message}`);
-  // Filter is_active in JS — Supabase client can't filter on joined columns
   return (data ?? []).filter((m: any) => m.clients?.is_active === true);
 }
 
 async function fetchNextPendingPerClient() {
-  // Used by sendNow — ignores send_at, returns lowest seq per active client
   const { data, error } = await supabase
     .from('follow_up_messages')
     .select('*, clients!inner(name, phone_number, property_link, is_active, email)')
@@ -54,7 +49,6 @@ async function sendBatch(messages: any[]) {
 
     const { success, statusCode, error } = await sendTextMessage(phone, body);
 
-    // Mark sent or failed (mirrors Python mark_message_sent / mark_message_failed)
     if (success) {
       await supabase
         .from('follow_up_messages')
@@ -67,7 +61,6 @@ async function sendBatch(messages: any[]) {
         .eq('id', msg.id);
     }
 
-    // Append-only send log (mirrors Python log_send_attempt)
     await supabase.from('send_log').insert({
       message_id:      msg.id,
       success,
@@ -77,34 +70,83 @@ async function sendBatch(messages: any[]) {
   }
 }
 
-// ── Scheduled job (runs every minute — mirrors Python _process_pending) ───────
+// ── Smart sleep: find the next send_at in the DB ──────────────────────────────
 
-async function processPending() {
+async function fetchNextSendAt(): Promise<Date | null> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('follow_up_messages')
+    .select('send_at, clients!inner(is_active)')
+    .eq('status', 'pending')
+    .gt('send_at', now)         // only future messages
+    .order('send_at')
+    .limit(10);                 // grab a few in case some have inactive clients
+
+  if (error || !data || data.length === 0) return null;
+
+  // Find the first one belonging to an active client
+  const next = data.find((m: any) => m.clients?.is_active === true);
+  return next ? new Date(next.send_at) : null;
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+
+const MIN_SLEEP_MS  = 10_000;        // never sleep less than 10 seconds
+const MAX_SLEEP_MS  = 60 * 60_000;   // never sleep more than 1 hour (safety cap)
+const OVERDUE_GRACE = 5_000;         // wait 5s after wake-up before sending
+
+async function tick() {
+  if (!_running) return;
+
   try {
+    // 1. Send anything that's due right now
     const messages = await fetchPendingDueMessages();
-    if (messages.length === 0) return;
-    console.log(`[Scheduler] ${messages.length} message(s) to send.`);
-    await sendBatch(messages);
+    if (messages.length > 0) {
+      console.log(`[Scheduler] Sending ${messages.length} message(s).`);
+      await sendBatch(messages);
+    }
+
+    // 2. Find when the next message is due
+    const nextAt = await fetchNextSendAt();
+
+    let sleepMs: number;
+
+    if (!nextAt) {
+      // No future messages — check again in 1 hour
+      sleepMs = MAX_SLEEP_MS;
+      console.log('[Scheduler] No upcoming messages. Sleeping 1 hour.');
+    } else {
+      const msUntilNext = nextAt.getTime() - Date.now();
+      // Add a small grace period so we don't wake up 1ms too early
+      sleepMs = Math.max(MIN_SLEEP_MS, msUntilNext + OVERDUE_GRACE);
+      console.log(`[Scheduler] Next message at ${nextAt.toISOString()} — sleeping ${Math.round(sleepMs / 1000)}s.`);
+    }
+
+    sleepMs = Math.min(sleepMs, MAX_SLEEP_MS);
+    _timer = setTimeout(tick, sleepMs);
+
   } catch (err) {
     console.error('[Scheduler] Error:', err);
+    // On error, retry in 1 minute
+    _timer = setTimeout(tick, 60_000);
   }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function startScheduler() {
-  if (cronJob) return;
-  // Every minute — equivalent to Python IntervalTrigger(seconds=60)
-  cronJob = cron.schedule('* * * * *', processPending, { timezone: process.env.TZ });
-  console.log(`[Scheduler] Started — TZ: ${process.env.TZ}`);
+  if (_running) return;
+  _running = true;
+  console.log('[Scheduler] Started — smart sleep mode.');
+  tick(); // kick off immediately
 }
 
 export function stopScheduler() {
-  cronJob?.stop();
-  cronJob = null;
+  _running = false;
+  if (_timer) { clearTimeout(_timer); _timer = null; }
+  console.log('[Scheduler] Stopped.');
 }
 
-// Mirrors Python run_now() — sends next message per client ignoring schedule
 export async function sendNow(): Promise<{ sent: number }> {
   const messages = await fetchNextPendingPerClient();
   if (messages.length === 0) {
@@ -114,4 +156,15 @@ export async function sendNow(): Promise<{ sent: number }> {
   console.log(`[SendNow] Sending ${messages.length} message(s).`);
   await sendBatch(messages);
   return { sent: messages.length };
+}
+
+// ── Called whenever a new message is scheduled ────────────────────────────────
+// Import and call this from your clients route after inserting messages,
+// so the scheduler wakes up immediately instead of waiting out its current sleep.
+
+export function nudgeScheduler() {
+  if (!_running) return;
+  if (_timer) { clearTimeout(_timer); _timer = null; }
+  console.log('[Scheduler] Nudged — re-evaluating schedule.');
+  tick();
 }

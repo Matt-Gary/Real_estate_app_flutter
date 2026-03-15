@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../services/supabase';
 import { requireAuth } from '../middleware/auth';
+import { nudgeScheduler } from '../services/scheduler';
 
 const router = Router();
 router.use(requireAuth);
@@ -74,6 +75,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.status(201).json(data);
+  nudgeScheduler();
 });
 
 // PATCH /api/clients/:id

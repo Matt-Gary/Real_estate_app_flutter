@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../services/supabase';
 import { requireAuth } from '../middleware/auth';
+import { nudgeScheduler } from '../services/scheduler';
 
 const router = Router();
 router.use(requireAuth);
@@ -63,6 +64,7 @@ router.put('/clients/:clientId/messages', async (req: Request, res: Response) =>
     .select();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+  nudgeScheduler();
   res.json(data);
 });
 
