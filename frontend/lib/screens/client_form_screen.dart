@@ -102,15 +102,63 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     );
     if (time == null || !mounted) return;
 
-    setState(() {
-      _sendAt[index] = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
+    final picked = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+
+    // Validate against previous message
+    if (index > 0 && !picked.isAfter(_sendAt[index - 1])) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
+          title: const Text('Horário inválido'),
+          content: Text(
+            'A mensagem ${index + 1} deve ser enviada depois da mensagem $index.\n\n'
+            'Mensagem $index está agendada para:\n'
+            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[index - 1])}',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
-    });
+      return;
+    }
+
+    // Validate against next message
+    if (index < 4 && !picked.isBefore(_sendAt[index + 1])) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
+          title: const Text('Horário inválido'),
+          content: Text(
+            'A mensagem ${index + 1} deve ser enviada antes da mensagem ${index + 2}.\n\n'
+            'Mensagem ${index + 2} está agendada para:\n'
+            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[index + 1])}',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    setState(() => _sendAt[index] = picked);
   }
 
   Future<void> _save() async {
@@ -151,7 +199,15 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       }
       return;
     }
-
+    // Validate message order before saving
+    for (int i = 1; i < 5; i++) {
+      if (!_sendAt[i].isAfter(_sendAt[i - 1])) {
+        setState(() {
+          _error = 'Mensagem ${i + 1} deve ser agendada depois da mensagem $i.';
+        });
+        return;
+      }
+    }
     setState(() {
       _loading = true;
       _error = null;
