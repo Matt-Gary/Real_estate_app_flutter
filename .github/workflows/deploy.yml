@@ -1,0 +1,49 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            cd /var/www/real_estate_app/backend
+
+            # Write .env file from secret
+            cat > .env << 'ENVEOF'
+            ${{ secrets.ENV }}
+            ENVEOF
+
+            # Pull latest code
+            git pull origin main
+
+            # Install dependencies
+            npm install --production
+
+            # Restart or start with PM2
+            pm2 describe real_estate_backend > /dev/null 2>&1 \
+              && pm2 restart real_estate_backend \
+              || pm2 start npm --name real_estate_backend -- start
+
+            # Save PM2 process list
+            pm2 save
+
+            # Health check
+            sleep 3
+            curl -f http://127.0.0.1:3001/health
