@@ -24,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🏡  RE Follow-Up Bot'),
+        title: const Text('🏡 Follow-Up Bot'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
+            tooltip: 'Sair',
             onPressed: () => context.read<AuthProvider>().logout(),
           ),
         ],
@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
               NavigationRailDestination(
                 icon: Icon(Icons.people_outline),
                 selectedIcon: Icon(Icons.people),
-                label: Text('Clients'),
+                label: Text('Clientes'),
               ),
             ],
           ),

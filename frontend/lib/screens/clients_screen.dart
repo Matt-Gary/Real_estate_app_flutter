@@ -35,16 +35,16 @@ class _ClientsScreenState extends State<ClientsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Mark as replied'),
+        title: const Text('Marcar como respondido'),
         content: Text(
-            'Mark ${client["name"]} as replied?\nAll pending follow-ups will be cancelled.'),
+            'Marcar ${client["name"]} como respondido?\nTodos os agendamentos pendentes serão cancelados.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: const Text('Cancelar')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Confirm')),
+              child: const Text('Confirmar')),
         ],
       ),
     );
@@ -64,17 +64,17 @@ class _ClientsScreenState extends State<ClientsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Delete client'),
+        title: const Text('Deletar cliente'),
         content: Text(
-            'Permanently delete ${client["name"]} and all their messages?'),
+            'Deletar permanentemente ${client["name"]} e todos os seus agendamentos?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: const Text('Cancelar')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: const Text('Deletar'),
           ),
         ],
       ),
@@ -108,7 +108,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
         children: [
           Row(
             children: [
-              Text('Clients',
+              Text('Clientes',
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -117,13 +117,13 @@ class _ClientsScreenState extends State<ClientsScreen> {
               OutlinedButton.icon(
                 onPressed: _load,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Refresh'),
+                label: const Text('Atualizar'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => _openForm(),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Client'),
+                label: const Text('Adicionar Cliente'),
               ),
             ],
           ),
@@ -135,7 +135,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
           else if (_clients.isEmpty)
             const Center(
               child: Text(
-                'No clients yet. Click Add Client to get started.',
+                'Nenhum cliente cadastrado. Clique em Adicionar Cliente para começar.',
                 style: TextStyle(color: Colors.grey),
               ),
             )
@@ -210,7 +210,7 @@ class _ClientRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                isActive ? 'Active' : 'Replied',
+                isActive ? 'Ativo' : 'Respondido',
                 style: TextStyle(
                   fontSize: 12,
                   color: isActive ? Colors.green : Colors.grey,
@@ -233,7 +233,7 @@ class _ClientRow extends StatelessWidget {
             if (isActive)
               IconButton(
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                tooltip: 'Mark replied',
+                tooltip: 'Marcar como respondido',
                 onPressed: onReplied,
               ),
             IconButton(

@@ -70,7 +70,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               OutlinedButton.icon(
                 onPressed: _loading ? null : _load,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Refresh'),
+                label: const Text('Atualizar'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
@@ -81,7 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.send, size: 18),
-                label: const Text('Send Now'),
+                label: const Text('Enviar Agora'),
                 style: FilledButton.styleFrom(backgroundColor: Colors.green[700]),
               ),
             ],
@@ -102,12 +102,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final waColor = waState == 'open' ? Colors.green : Colors.red;
 
     final statCards = [
-      _StatData('Total Clients', s['total'],     const Color(0xFF7F77DD)),
-      _StatData('Active',        s['active'],    Colors.green),
-      _StatData('Replied',       s['replied'],   Colors.grey),
-      _StatData('Msgs Sent',     s['sent'],      const Color(0xFF3B8BD4)),
-      _StatData('Pending',       s['pending'],   Colors.orange),
-      _StatData('Failed',        s['failed'],    Colors.red),
+      _StatData('Total de Clientes', s['total'],     const Color(0xFF7F77DD)),
+      _StatData('Ativos',        s['active'],    Colors.green),
+      _StatData('Respondidos',       s['replied'],   Colors.grey),
+      _StatData('Enviados',     s['sent'],      const Color(0xFF3B8BD4)),
+      _StatData('Pendentes',       s['pending'],   Colors.orange),
+      _StatData('Falhas',        s['failed'],    Colors.red),
     ];
 
     return Column(
@@ -129,7 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Scheduler: running — fires automatically when messages are due.',
+          'Agendador: rodando — dispara automaticamente quando as mensagens estão prontas.',
           style: TextStyle(color: Colors.grey),
         ),
       ],

@@ -76,16 +76,16 @@ class _LoginScreenState extends State<LoginScreen>
   await showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Reset Password'),
+      title: const Text('Resetar Senha'),
       content: TextField(
         controller: emailCtrl,
-        decoration: const InputDecoration(labelText: 'Your email'),
+        decoration: const InputDecoration(labelText: 'Seu email'),
         keyboardType: TextInputType.emailAddress,
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
+          child: const Text('Cancelar'),
         ),
         FilledButton(
           onPressed: () async {
@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen>
               await ApiService.forgotPassword(email);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('If that email exists, a reset link was sent.'),
+                  content: Text('Se esse email existir, um link de reset foi enviado.'),
                 ));
               }
             } catch (e) {
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen>
               if (mounted) setState(() => _loading = false);
             }
           },
-          child: const Text('Send Reset Link'),
+          child: const Text('Enviar Link de Reset'),
         ),
       ],
     ),
@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
               children: [
                 const Text('🏡', style: TextStyle(fontSize: 56)),
                 const SizedBox(height: 12),
-                Text('RE Follow-Up Bot',
+                Text('Follow-Up Bot',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold)),
                 const SizedBox(height: 32),
@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen>
                       children: [
                         TabBar(
                           controller: _tabs,
-                          tabs: const [Tab(text: 'Sign In'), Tab(text: 'Register')],
+                          tabs: const [Tab(text: 'Entrar'), Tab(text: 'Cadastrar')],
                           onTap: (_) => setState(() => _error = null),
                         ),
                         const SizedBox(height: 24),
@@ -166,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     height: 18,
                                     child: CircularProgressIndicator(strokeWidth: 2),
                                   )
-                                : Text(_tabs.index == 0 ? 'Sign In' : 'Create Account'),
+                                : Text(_tabs.index == 0 ? 'Entrar' : 'Cadastrar'),
                           ),
                         ),
                       ],
@@ -190,20 +190,20 @@ class _LoginScreenState extends State<LoginScreen>
             controller: _emailCtrl,
             decoration: const InputDecoration(labelText: 'Email'),
             keyboardType: TextInputType.emailAddress,
-            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
+            validator: (v) => (v?.isEmpty ?? true) ? 'Obrigatório' : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _passCtrl,
-            decoration: const InputDecoration(labelText: 'Password'),
+            decoration: const InputDecoration(labelText: 'Senha'),
             obscureText: true,
-            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
+            validator: (v) => (v?.isEmpty ?? true) ? 'Obrigatório' : null,
           ),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: _showForgotPasswordDialog,
-              child: const Text('Forgot password?'),
+              child: const Text('Esqueceu a senha?'),
             ),
           ),
         ],
@@ -218,23 +218,23 @@ class _LoginScreenState extends State<LoginScreen>
         children: [
           TextFormField(
             controller: _nameCtrl,
-            decoration: const InputDecoration(labelText: 'Full name'),
-            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
+            decoration: const InputDecoration(labelText: 'Nome completo'),
+            validator: (v) => (v?.isEmpty ?? true) ? 'Obrigatório' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _regEmailCtrl,
             decoration: const InputDecoration(labelText: 'Email'),
             keyboardType: TextInputType.emailAddress,
-            validator: (v) => (v?.isEmpty ?? true) ? 'Required' : null,
+            validator: (v) => (v?.isEmpty ?? true) ? 'Obrigatório' : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _regPassCtrl,
-            decoration: const InputDecoration(labelText: 'Password (min 8 chars)'),
+            decoration: const InputDecoration(labelText: 'Senha (min 8 caracteres)'),
             obscureText: true,
             validator: (v) =>
-                (v == null || v.length < 8) ? 'Min 8 characters' : null,
+                (v == null || v.length < 8) ? 'Min 8 caracteres' : null,
           ),
         ],
       ),

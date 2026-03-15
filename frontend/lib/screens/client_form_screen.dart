@@ -148,7 +148,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Client' : 'Add Client'),
+        title: Text(_isEdit ? 'Editar Cliente' : 'Adicionar Cliente'),
         actions: [
           TextButton(
             onPressed: _loading ? null : _save,
@@ -170,14 +170,14 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _sectionTitle('Client Information'),
+                    _sectionTitle('Informações do Cliente'),
                     const SizedBox(height: 16),
-                    _field(_nameCtrl,  'Full name *', required: true),
-                    _field(_phoneCtrl, 'WhatsApp phone *',
+                    _field(_nameCtrl,  'Nome completo *', required: true),
+                    _field(_phoneCtrl, 'WhatsApp*',
                         hint: '+5511999999999', required: true),
                     _field(_emailCtrl, 'Email', hint: 'client@email.com'),
-                    _field(_linkCtrl,  'Property link', hint: 'https://...'),
-                    _field(_notesCtrl, 'Notes', maxLines: 3),
+                    _field(_linkCtrl,  'Link da propriedade', hint: 'https://...'),
+                    _field(_notesCtrl, 'Observações', maxLines: 3),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(_error!,
@@ -185,7 +185,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                               color: Theme.of(context).colorScheme.error)),
                     ],
                     const Divider(height: 48),
-                    _sectionTitle('Follow-up Messages'),
+                    _sectionTitle('Mensagens de Follow-up'),
                     const SizedBox(height: 4),
                     Text(
                       'Placeholders: {name}  {property_link}  {email}',
@@ -232,7 +232,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           border: const OutlineInputBorder(),
         ),
         validator: required
-            ? (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null
+            ? (v) => (v?.trim().isEmpty ?? true) ? 'Obrigatório' : null
             : null,
       ),
     );
@@ -248,7 +248,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Message ${index + 1}',
+              'Mensagem ${index + 1}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
@@ -256,7 +256,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               controller: _bodyCtrl[index],
               maxLines: 3,
               decoration: const InputDecoration(
-                hintText: 'Message body...',
+                hintText: 'Corpo da mensagem...',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -272,7 +272,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                 const Spacer(),
                 TextButton(
                   onPressed: () => _pickDateTime(index),
-                  child: const Text('Change'),
+                  child: const Text('Alterar'),
                 ),
               ],
             ),

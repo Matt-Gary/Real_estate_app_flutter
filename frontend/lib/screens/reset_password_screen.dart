@@ -63,7 +63,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 const Text('🏡', style: TextStyle(fontSize: 56)),
                 const SizedBox(height: 12),
                 Text(
-                  'RE Follow-Up Bot',
+                  'Follow-Up Bot',
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -93,12 +93,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               size: 48, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 16),
           const Text(
-            'Invalid reset link',
+            'Link de reset inválido',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
-            'This link is missing a reset token. Please request a new password reset.',
+            'Este link está faltando um token de reset. Por favor, solicite um novo reset de senha.',
             textAlign: TextAlign.center,
           ),
         ],
@@ -111,7 +111,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Set new password',
+            'Definir nova senha',
             style: Theme.of(context)
                 .textTheme
                 .titleLarge
@@ -121,18 +121,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SizedBox(height: 24),
           TextFormField(
             controller: _newPassCtrl,
-            decoration: const InputDecoration(labelText: 'New password'),
+            decoration: const InputDecoration(labelText: 'Senha nova'),
             obscureText: true,
             validator: (v) =>
-                (v == null || v.length < 8) ? 'Min 8 characters' : null,
+                (v == null || v.length < 8) ? 'Min 8 caracteres' : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _confirmPassCtrl,
-            decoration: const InputDecoration(labelText: 'Confirm new password'),
+            decoration: const InputDecoration(labelText: 'Confirmar nova senha'),
             obscureText: true,
             validator: (v) =>
-                v != _newPassCtrl.text ? 'Passwords do not match' : null,
+                v != _newPassCtrl.text ? 'Senhas não correspondem' : null,
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -151,7 +151,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Reset Password'),
+                : const Text('Redefinir Senha'),
           ),
         ],
       ),
@@ -165,12 +165,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             size: 56, color: Theme.of(context).colorScheme.primary),
         const SizedBox(height: 16),
         const Text(
-          'Password updated!',
+          'Senha redefinida!',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         const Text(
-          'Your password has been changed. You can now sign in.',
+          'Sua senha foi alterada. Agora você pode fazer login.',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -186,7 +186,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             }
             Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
           },
-          child: const Text('Go to Sign In'),
+          child: const Text('Voltar para Login'),
         ),
       ],
     );
