@@ -23,27 +23,30 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           script: |
-            cd /var/www/real_estate_app/backend
-
-            # Write .env file from secret
-            cat > .env << 'ENVEOF'
-            ${{ secrets.ENV }}
-            ENVEOF
+            cd /var/www/real_estate_app/repo
 
             # Pull latest code
             git pull origin main
 
+            cd backend
+
+            # Write .env from GitHub secret
+            cat > .env << 'ENVEOF'
+            ${{ secrets.ENV }}
+            ENVEOF
+
             # Install dependencies
-            npm install --production
+            npm install
 
-            # Restart or start with PM2
-            pm2 describe real_estate_backend > /dev/null 2>&1 \
-              && pm2 restart real_estate_backend \
-              || pm2 start npm --name real_estate_backend -- start
+            # Build TypeScript
+            npm run build
 
-            # Save PM2 process list
-            pm2 save
+            # Restart PM2
+            pm2 restart real_estate_backend
 
             # Health check
             sleep 3
             curl -f http://127.0.0.1:3001/health
+git add .github/workflows/deploy-backend.yml
+git commit -m "Add backend deploy workflow"
+git push origin main
