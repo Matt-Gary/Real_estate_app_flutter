@@ -146,7 +146,7 @@ class _StatData {
 
 class _StatCard extends StatelessWidget {
   final _StatData data;
-  const _StatCard({super.key, required this.data});
+  const _StatCard({required this.data});
 
   @override
   Widget build(BuildContext context) {
