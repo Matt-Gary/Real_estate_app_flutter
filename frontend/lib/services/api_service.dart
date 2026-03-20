@@ -4,7 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Change this to your VM IP / domain in production
-  static const String baseUrl = 'http://localhost:3000/api';
+  //static const String baseUrl = 'http://localhost:3000/api'; 
+  static const String baseUrl = 'http://72.60.137.97:3001/api';
 
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();

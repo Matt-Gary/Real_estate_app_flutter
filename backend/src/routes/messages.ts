@@ -84,6 +84,21 @@ router.put('/clients/:clientId/messages', async (req: Request, res: Response) =>
     .select();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Delete any pending messages that are not in the incoming payload
+  const incomingSeqs = rows.map((r: any) => r.seq);
+  const toDelete = (existing ?? [])
+    .filter(m => !incomingSeqs.includes(m.seq) && m.status === 'pending')
+    .map(m => m.seq);
+
+  if (toDelete.length > 0) {
+    await supabase
+      .from('follow_up_messages')
+      .delete()
+      .eq('client_id', req.params.clientId)
+      .in('seq', toDelete);
+  }
+
   nudgeScheduler();
   res.json(data);
 });

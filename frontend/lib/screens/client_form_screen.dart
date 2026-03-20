@@ -20,7 +20,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   final _notesCtrl = TextEditingController();
 
   late List<TextEditingController> _bodyCtrl;
-  late List<DateTime> _sendAt;
+  late List<DateTime?> _sendAt;
 
   bool _loading = false;
   bool _loadingData = true;
@@ -31,12 +31,8 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
     _bodyCtrl = List.generate(5, (_) => TextEditingController());
-    _sendAt = List.generate(
-      5,
-      (i) => DateTime(now.year, now.month, now.day + i + 1, 10, 0),
-    );
+    _sendAt = List.generate(5, (_) => null);
     _init();
   }
 
@@ -87,18 +83,19 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
 
   Future<void> _pickDateTime(int index) async {
     final current = _sendAt[index];
+    final now = DateTime.now();
 
     final date = await showDatePicker(
       context: context,
-      initialDate: current,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: current ?? now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
     );
     if (date == null || !mounted) return;
 
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(current),
+      initialTime: TimeOfDay.fromDateTime(current ?? now),
     );
     if (time == null || !mounted) return;
 
@@ -110,8 +107,15 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       time.minute,
     );
 
-    // Validate against previous message
-    if (index > 0 && !picked.isAfter(_sendAt[index - 1])) {
+    // Validate against previous non-null message
+    int prevIndex = -1;
+    for (int i = index - 1; i >= 0; i--) {
+      if (_sendAt[i] != null) {
+        prevIndex = i;
+        break;
+      }
+    }
+    if (prevIndex != -1 && !picked.isAfter(_sendAt[prevIndex]!)) {
       if (!mounted) return;
       await showDialog(
         context: context,
@@ -119,9 +123,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
           title: const Text('Horário inválido'),
           content: Text(
-            'A mensagem ${index + 1} deve ser enviada depois da mensagem $index.\n\n'
-            'Mensagem $index está agendada para:\n'
-            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[index - 1])}',
+            'A mensagem ${index + 1} deve ser enviada depois da mensagem ${prevIndex + 1}.\n\n'
+            'Mensagem ${prevIndex + 1} está agendada para:\n'
+            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[prevIndex]!)}',
           ),
           actions: [
             FilledButton(
@@ -134,8 +138,15 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       return;
     }
 
-    // Validate against next message
-    if (index < 4 && !picked.isBefore(_sendAt[index + 1])) {
+    // Validate against next non-null message
+    int nextIndex = -1;
+    for (int i = index + 1; i < 5; i++) {
+      if (_sendAt[i] != null) {
+        nextIndex = i;
+        break;
+      }
+    }
+    if (nextIndex != -1 && !picked.isBefore(_sendAt[nextIndex]!)) {
       if (!mounted) return;
       await showDialog(
         context: context,
@@ -143,9 +154,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
           title: const Text('Horário inválido'),
           content: Text(
-            'A mensagem ${index + 1} deve ser enviada antes da mensagem ${index + 2}.\n\n'
-            'Mensagem ${index + 2} está agendada para:\n'
-            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[index + 1])}',
+            'A mensagem ${index + 1} deve ser enviada antes da mensagem ${nextIndex + 1}.\n\n'
+            'Mensagem ${nextIndex + 1} está agendada para:\n'
+            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[nextIndex]!)}',
           ),
           actions: [
             FilledButton(
@@ -200,12 +211,18 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       return;
     }
     // Validate message order before saving
-    for (int i = 1; i < 5; i++) {
-      if (!_sendAt[i].isAfter(_sendAt[i - 1])) {
-        setState(() {
-          _error = 'Mensagem ${i + 1} deve ser agendada depois da mensagem $i.';
-        });
-        return;
+    DateTime? lastDate;
+    int lastIndex = -1;
+    for (int i = 0; i < 5; i++) {
+      if (_sendAt[i] != null) {
+        if (lastDate != null && !_sendAt[i]!.isAfter(lastDate)) {
+          setState(() {
+            _error = 'Mensagem ${i + 1} deve ser agendada depois da mensagem ${lastIndex + 1}.';
+          });
+          return;
+        }
+        lastDate = _sendAt[i];
+        lastIndex = i;
       }
     }
     setState(() {
@@ -234,14 +251,16 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
         clientId = created['id'];
       }
 
-      final messages = List.generate(
-        5,
-        (i) => {
-          'seq': i + 1,
-          'body': _bodyCtrl[i].text,
-          'send_at': _sendAt[i].toUtc().toIso8601String(),
-        },
-      );
+      final messages = <Map<String, dynamic>>[];
+      for (int i = 0; i < 5; i++) {
+        if (_sendAt[i] != null) {
+          messages.add({
+            'seq': i + 1,
+            'body': _bodyCtrl[i].text,
+            'send_at': _sendAt[i]!.toUtc().toIso8601String(),
+          });
+        }
+      }
 
       await ApiService.upsertMessages(clientId, messages);
 
@@ -424,16 +443,32 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.schedule, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  fmt.format(_sendAt[index]),
-                  style: const TextStyle(fontSize: 13),
+                Icon(
+                  Icons.schedule,
+                  size: 16,
+                  color: _sendAt[index] != null ? Colors.grey : Colors.grey.shade400,
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _sendAt[index] != null ? fmt.format(_sendAt[index]!) : 'Não agendado',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: _sendAt[index] != null ? null : Colors.grey,
+                      fontStyle: _sendAt[index] != null ? FontStyle.normal : FontStyle.italic,
+                    ),
+                  ),
+                ),
+                if (_sendAt[index] != null)
+                  IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    color: Colors.red,
+                    tooltip: 'Remover',
+                    onPressed: () => setState(() => _sendAt[index] = null),
+                  ),
                 TextButton(
                   onPressed: () => _pickDateTime(index),
-                  child: const Text('Alterar'),
+                  child: Text(_sendAt[index] != null ? 'Alterar' : 'Agendar'),
                 ),
               ],
             ),
