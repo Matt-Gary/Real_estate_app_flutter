@@ -8,7 +8,6 @@ A full-stack, automated follow-up bot and CRM system designed specifically for r
 ## 📸 Dashboard Preview
 
 ![Dashboard Preview](./dashboard-preview.png)
-*(Note: Please ensure the `dashboard-preview.png` file is placed in the project root to display above)*
 
 As seen in the dashboard, the system monitors real-time statistics of client interactions, including active clients, responded messages, pending follow-ups, and failed message attempts. It also indicates the live connection status of the WhatsApp integration and the automated scheduler.
 
@@ -70,5 +69,3 @@ The repository is structured as a monorepo consisting of:
 3. Run `flutter run -d chrome` (or your preferred target device) to start the frontend application.
 
 ---
-
-*Designed and developed to bring modern automation to real estate prospecting.*
