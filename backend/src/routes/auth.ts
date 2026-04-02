@@ -132,7 +132,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
   res.json({ message: 'If that email exists, a reset link was sent.' });
 });
 
-// POST /api/auth/reset-password
+// POST /api/auth/reset-passwordd
 router.post('/reset-password', async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword) { res.status(400).json({ error: 'Token and new password are required' }); return; }
