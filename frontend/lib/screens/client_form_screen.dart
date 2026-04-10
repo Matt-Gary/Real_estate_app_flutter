@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import 'templates_screen.dart';
 
 class ClientFormScreen extends StatefulWidget {
   final dynamic client; // null = new client
@@ -21,6 +22,11 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
 
   late List<TextEditingController> _bodyCtrl;
   late List<DateTime?> _sendAt;
+
+  List<dynamic> _templates = [];
+  List<String?> _selectedTemplateIds = List.generate(5, (_) => null);
+  final List<GlobalKey<FormFieldState<String?>>> _dropdownKeys =
+      List.generate(5, (_) => GlobalKey<FormFieldState<String?>>());
 
   bool _loading = false;
   bool _loadingData = true;
@@ -47,6 +53,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     }
 
     try {
+      // Always load agent templates for the dropdown
+      final templates = await ApiService.getTemplates();
+      _templates = templates;
+
       if (_isEdit) {
         final msgs = await ApiService.getMessages(widget.client['id']);
         for (final m in msgs) {
@@ -56,11 +66,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           _sendAt[seq] = DateTime.parse(m['send_at']).toLocal();
         }
       } else {
-        final templates = await ApiService.getTemplates();
-        for (final t in templates) {
-          final seq = (t['seq'] as int) - 1;
-          if (seq < 0 || seq > 4) continue;
-          _bodyCtrl[seq].text = t['body'] ?? '';
+        // Pre-fill slots with templates in order
+        for (int i = 0; i < templates.length && i < 5; i++) {
+          _bodyCtrl[i].text = templates[i]['body'] ?? '';
+          _selectedTemplateIds[i] = templates[i]['id'] as String;
         }
       }
     } catch (_) {}
@@ -375,7 +384,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                         context,
                       ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     ...List.generate(5, _messageBlock),
                   ],
                 ),
@@ -427,6 +436,68 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_templates.isNotEmpty) ...[
+              DropdownButtonFormField<String>(
+                key: _dropdownKeys[index],
+                initialValue: _selectedTemplateIds[index],
+                isDense: true,
+                decoration: const InputDecoration(
+                  labelText: 'Usar template',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.article_outlined, size: 18),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('— nenhum —'),
+                  ),
+                  ..._templates.map((t) => DropdownMenuItem<String>(
+                        value: t['id'] as String,
+                        child: Text(t['name'] as String),
+                      )),
+                  const DropdownMenuItem<String>(
+                    value: '__ADD_TEMPLATE__',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add, size: 16, color: Colors.blue),
+                        SizedBox(width: 6),
+                        Text(
+                          'Adicionar template',
+                          style: TextStyle(color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                onChanged: (id) async {
+                  if (id == '__ADD_TEMPLATE__') {
+                    _dropdownKeys[index].currentState?.reset();
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TemplatesScreen()),
+                    );
+                    if (!mounted) return;
+                    final fresh = await ApiService.getTemplates();
+                    setState(() => _templates = fresh);
+                    return;
+                  }
+                  setState(() {
+                    _selectedTemplateIds[index] = id;
+                    if (id != null) {
+                      final template = _templates.cast<Map<String, dynamic>>().firstWhere(
+                        (t) => t['id'] == id,
+                        orElse: () => {},
+                      );
+                      if (template.isNotEmpty) {
+                        _bodyCtrl[index].text = template['body'] ?? '';
+                      }
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
             Text(
               'Mensagem ${index + 1}',
               style: const TextStyle(fontWeight: FontWeight.bold),

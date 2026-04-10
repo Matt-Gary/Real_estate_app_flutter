@@ -4,8 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Change this to your VM IP / domain in production
-  //static const String baseUrl = 'http://localhost:3000/api'; 
-  static const String baseUrl = 'http://72.60.137.97:3001/api';
+  static const String baseUrl = 'http://localhost:3000/api';
+  //static const String baseUrl = 'http://72.60.137.97:3001/api';
 
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -30,28 +30,33 @@ class ApiService {
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
-static Future<void> forgotPassword(String email) async {
-  final res = await http.post(
-    Uri.parse('$baseUrl/auth/forgot-password'),
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({'email': email}),
-  );
-  final body = jsonDecode(res.body);
-  if (res.statusCode != 200) throw Exception(body['error'] ?? 'Request failed');
-}
 
-static Future<void> resetPassword(String token, String newPassword) async {
-  final res = await http.post(
-    Uri.parse('$baseUrl/auth/reset-password'),
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({'token': token, 'newPassword': newPassword}),
-  );
-  final body = jsonDecode(res.body);
-  if (res.statusCode != 200) throw Exception(body['error'] ?? 'Reset failed');
-}
+  static Future<void> forgotPassword(String email) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200)
+      throw Exception(body['error'] ?? 'Request failed');
+  }
+
+  static Future<void> resetPassword(String token, String newPassword) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'token': token, 'newPassword': newPassword}),
+    );
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200) throw Exception(body['error'] ?? 'Reset failed');
+  }
   // ── Auth ───────────────────────────────────────────────────────────────────
 
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+    String email,
+    String password,
+  ) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
@@ -63,14 +68,18 @@ static Future<void> resetPassword(String token, String newPassword) async {
   }
 
   static Future<Map<String, dynamic>> register(
-      String email, String password, String name) async {
+    String email,
+    String password,
+    String name,
+  ) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password, 'name': name}),
     );
     final data = jsonDecode(res.body);
-    if (res.statusCode != 201) throw Exception(data['error'] ?? 'Registration failed');
+    if (res.statusCode != 201)
+      throw Exception(data['error'] ?? 'Registration failed');
     return data;
   }
 
@@ -94,26 +103,32 @@ static Future<void> resetPassword(String token, String newPassword) async {
     return jsonDecode(res.body);
   }
 
-  static Future<Map<String, dynamic>> createClient(Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> createClient(
+    Map<String, dynamic> data,
+  ) async {
     final res = await http.post(
       Uri.parse('$baseUrl/clients'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
     );
     final body = jsonDecode(res.body);
-    if (res.statusCode != 201) throw Exception(body['error'] ?? 'Failed to create client');
+    if (res.statusCode != 201)
+      throw Exception(body['error'] ?? 'Failed to create client');
     return body;
   }
 
   static Future<Map<String, dynamic>> updateClient(
-      String id, Map<String, dynamic> data) async {
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     final res = await http.patch(
       Uri.parse('$baseUrl/clients/$id'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
     );
     final body = jsonDecode(res.body);
-    if (res.statusCode != 200) throw Exception(body['error'] ?? 'Failed to update client');
+    if (res.statusCode != 200)
+      throw Exception(body['error'] ?? 'Failed to update client');
     return body;
   }
 
@@ -145,14 +160,17 @@ static Future<void> resetPassword(String token, String newPassword) async {
   }
 
   static Future<List<dynamic>> upsertMessages(
-      String clientId, List<Map<String, dynamic>> messages) async {
+    String clientId,
+    List<Map<String, dynamic>> messages,
+  ) async {
     final res = await http.put(
       Uri.parse('$baseUrl/clients/$clientId/messages'),
       headers: await _authHeaders(),
       body: jsonEncode({'messages': messages}),
     );
     final body = jsonDecode(res.body);
-    if (res.statusCode != 200) throw Exception(body['error'] ?? 'Failed to save messages');
+    if (res.statusCode != 200)
+      throw Exception(body['error'] ?? 'Failed to save messages');
     return body;
   }
 
@@ -165,6 +183,43 @@ static Future<void> resetPassword(String token, String newPassword) async {
     );
     if (res.statusCode != 200) throw Exception('Failed to load templates');
     return jsonDecode(res.body);
+  }
+
+  static Future<Map<String, dynamic>> createTemplate(
+    Map<String, dynamic> data,
+  ) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/templates'),
+      headers: await _authHeaders(),
+      body: jsonEncode(data),
+    );
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 201)
+      throw Exception(body['error'] ?? 'Failed to create template');
+    return body;
+  }
+
+  static Future<Map<String, dynamic>> updateTemplate(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl/templates/$id'),
+      headers: await _authHeaders(),
+      body: jsonEncode(data),
+    );
+    final body = jsonDecode(res.body);
+    if (res.statusCode != 200)
+      throw Exception(body['error'] ?? 'Failed to update template');
+    return body;
+  }
+
+  static Future<void> deleteTemplate(String id) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/templates/$id'),
+      headers: await _authHeaders(),
+    );
+    if (res.statusCode != 200) throw Exception('Failed to delete template');
   }
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
