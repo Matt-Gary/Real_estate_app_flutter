@@ -53,7 +53,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/clients
 router.post('/', async (req: Request, res: Response) => {
-  const { name, phone_number, email, property_link, notes } = req.body;
+  const { name, phone_number, email, property_link_id, notes } = req.body;
 
   if (!name || !phone_number) {
     res.status(400).json({ error: 'name and phone_number are required' });
@@ -66,9 +66,9 @@ router.post('/', async (req: Request, res: Response) => {
       agent_id: req.agentId!,
       name,
       phone_number,
-      email:         email         ?? null,
-      property_link: property_link ?? null,
-      notes:         notes         ?? null,
+      email:            email            ?? null,
+      property_link_id: property_link_id ?? null,
+      notes:            notes            ?? null,
     })
     .select()
     .single();
@@ -80,7 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 // PATCH /api/clients/:id
 router.patch('/:id', async (req: Request, res: Response) => {
-  const allowed = ['name', 'phone_number', 'email', 'property_link', 'notes'];
+  const allowed = ['name', 'phone_number', 'email', 'property_link_id', 'notes'];
   const updates: Record<string, any> = {};
   for (const key of allowed) {
     if (key in req.body) updates[key] = req.body[key];

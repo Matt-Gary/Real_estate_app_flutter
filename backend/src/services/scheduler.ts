@@ -10,7 +10,7 @@ async function fetchDueColdClients() {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('cold_clients')
-    .select('*, clients!inner(name, phone_number, property_link, email, is_active)')
+    .select('*, clients!inner(name, phone_number, is_active, email, property_link_id, property_links(link))')
     .eq('is_active', true)
     .lte('next_send_at', now);
 
@@ -70,7 +70,7 @@ async function fetchPendingDueMessages() {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('follow_up_messages')
-    .select('*, clients!inner(name, phone_number, property_link, is_active, email)')
+    .select('*, clients!inner(name, phone_number, is_active, email, property_link_id, property_links(link))')
     .eq('status', 'pending')
     .lte('send_at', now)
     .order('send_at');
@@ -82,7 +82,7 @@ async function fetchPendingDueMessages() {
 async function fetchNextPendingPerClient() {
   const { data, error } = await supabase
     .from('follow_up_messages')
-    .select('*, clients!inner(name, phone_number, property_link, is_active, email)')
+    .select('*, clients!inner(name, phone_number, is_active, email, property_link_id, property_links(link))')
     .eq('status', 'pending')
     .order('client_id')
     .order('seq');

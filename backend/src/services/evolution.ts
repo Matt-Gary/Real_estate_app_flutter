@@ -2,10 +2,10 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const BASE_URL  = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
-const API_KEY   = process.env.EVOLUTION_API_KEY!;
-const INSTANCE  = process.env.EVOLUTION_INSTANCE!;
-const DRY_RUN   = process.env.DRY_RUN === 'true';
+const BASE_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+const API_KEY = process.env.EVOLUTION_API_KEY!;
+const INSTANCE = process.env.EVOLUTION_INSTANCE!;
+const DRY_RUN = process.env.DRY_RUN === 'true';
 
 const headers = {
   apikey: API_KEY,
@@ -38,7 +38,7 @@ export async function sendTextMessage(phone: string, text: string): Promise<Send
     return { success: true, statusCode: res.status, error: null };
   } catch (err: any) {
     const statusCode = err.response?.status ?? null;
-    const detail     = err.response?.data
+    const detail = err.response?.data
       ? JSON.stringify(err.response.data).slice(0, 300)
       : err.message;
     console.warn(`Evolution API error ${statusCode}: ${detail}`);
@@ -59,8 +59,9 @@ export async function checkInstanceStatus(): Promise<Record<string, any>> {
 
 // Mirrors Python evolution.format_message()
 export function formatMessage(body: string, client: Record<string, any>): string {
+  const pl = client.property_links;     // joined property_links row or null
   return body
-    .replace(/\{name\}/g,          client.name          ?? '')
-    .replace(/\{property_link\}/g, client.property_link ?? '')
-    .replace(/\{email\}/g,         client.email         ?? '');
+    .replace(/\{name\}/g, client.name ?? '')
+    .replace(/\{property_link\}/g, pl?.link ?? '')
+    .replace(/\{email\}/g, client.email ?? '');
 }

@@ -17,7 +17,6 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _linkCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
   late List<TextEditingController> _bodyCtrl;
@@ -27,6 +26,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   List<String?> _selectedTemplateIds = List.generate(5, (_) => null);
   final List<GlobalKey<FormFieldState<String?>>> _dropdownKeys =
       List.generate(5, (_) => GlobalKey<FormFieldState<String?>>());
+
+  List<dynamic> _propertyLinks = [];
+  String? _selectedPropertyLinkId;
 
   bool _loading = false;
   bool _loadingData = true;
@@ -48,14 +50,19 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       _nameCtrl.text = c['name'] ?? '';
       _phoneCtrl.text = c['phone_number'] ?? '';
       _emailCtrl.text = c['email'] ?? '';
-      _linkCtrl.text = c['property_link'] ?? '';
+      _selectedPropertyLinkId = c['property_link_id'];
       _notesCtrl.text = c['notes'] ?? '';
     }
 
     try {
-      // Always load agent templates for the dropdown
-      final templates = await ApiService.getTemplates();
+      // Always load agent templates and property links for the dropdowns
+      final results = await Future.wait([
+        ApiService.getTemplates(),
+        ApiService.getPropertyLinks(),
+      ]);
+      final templates = results[0];
       _templates = templates;
+      _propertyLinks = results[1];
 
       if (_isEdit) {
         final msgs = await ApiService.getMessages(widget.client['id']);
@@ -82,7 +89,6 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
-    _linkCtrl.dispose();
     _notesCtrl.dispose();
     for (final c in _bodyCtrl) {
       c.dispose();
@@ -247,9 +253,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
         'name': _nameCtrl.text.trim(),
         'phone_number': _phoneCtrl.text.trim(),
         'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-        'property_link': _linkCtrl.text.trim().isEmpty
-            ? null
-            : _linkCtrl.text.trim(),
+        'property_link_id': _selectedPropertyLinkId,
         'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       };
 
@@ -361,10 +365,28 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                       ),
                     ),
                     _field(_emailCtrl, 'Email', hint: 'client@email.com'),
-                    _field(
-                      _linkCtrl,
-                      'Link da propriedade',
-                      hint: 'https://...',
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: DropdownButtonFormField<String?>(
+                        initialValue: _selectedPropertyLinkId,
+                        decoration: const InputDecoration(
+                          labelText: 'Propriedade',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.home_work_outlined, size: 18),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('— nenhuma —'),
+                          ),
+                          ..._propertyLinks.map((pl) => DropdownMenuItem<String?>(
+                                value: pl['id'] as String,
+                                child: Text(pl['description'] as String),
+                              )),
+                        ],
+                        onChanged: (id) =>
+                            setState(() => _selectedPropertyLinkId = id),
+                      ),
                     ),
                     _field(_notesCtrl, 'Observações', maxLines: 3),
                     if (_error != null) ...[

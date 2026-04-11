@@ -291,6 +291,50 @@ class ApiService {
     _handleResponse(res, 'Failed to delete cold client');
   }
 
+  // ── Property Links ─────────────────────────────────────────────────────────
+
+  static Future<List<dynamic>> getPropertyLinks() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/property-links'),
+      headers: await _authHeaders(),
+    );
+    _handleResponse(res, 'Failed to load property links');
+    return jsonDecode(res.body);
+  }
+
+  static Future<Map<String, dynamic>> createPropertyLink(
+    Map<String, dynamic> data,
+  ) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/property-links'),
+      headers: await _authHeaders(),
+      body: jsonEncode(data),
+    );
+    _handleResponse(res, 'Failed to create property link');
+    return jsonDecode(res.body);
+  }
+
+  static Future<Map<String, dynamic>> updatePropertyLink(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl/property-links/$id'),
+      headers: await _authHeaders(),
+      body: jsonEncode(data),
+    );
+    _handleResponse(res, 'Failed to update property link');
+    return jsonDecode(res.body);
+  }
+
+  static Future<void> deletePropertyLink(String id) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/property-links/$id'),
+      headers: await _authHeaders(),
+    );
+    _handleResponse(res, 'Failed to delete property link');
+  }
+
   // ── Dashboard ──────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getDashboardStats() async {
