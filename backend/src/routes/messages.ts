@@ -103,4 +103,40 @@ router.put('/clients/:clientId/messages', async (req: Request, res: Response) =>
   res.json(data);
 });
 
+// DELETE /api/clients/:clientId/messages — reset all messages for a new cycle
+router.delete('/clients/:clientId/messages', async (req: Request, res: Response) => {
+  const { data: client } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', req.params.clientId)
+    .eq('agent_id', req.agentId!)
+    .maybeSingle();
+
+  if (!client) { res.status(404).json({ error: 'Client not found' }); return; }
+
+  // Remove send_log entries first (FK constraint)
+  const { data: msgs } = await supabase
+    .from('follow_up_messages')
+    .select('id')
+    .eq('client_id', req.params.clientId);
+
+  const msgIds = (msgs ?? []).map((m: any) => m.id);
+  if (msgIds.length > 0) {
+    await supabase.from('send_log').delete().in('message_id', msgIds);
+  }
+
+  await supabase
+    .from('follow_up_messages')
+    .delete()
+    .eq('client_id', req.params.clientId);
+
+  // Ensure client is active so scheduler can pick up new messages
+  await supabase
+    .from('clients')
+    .update({ is_active: true, replied_at: null })
+    .eq('id', req.params.clientId);
+
+  res.json({ ok: true });
+});
+
 export default router;

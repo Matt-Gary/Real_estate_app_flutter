@@ -12,6 +12,7 @@ class AuthProvider extends ChangeNotifier {
   bool get loading => _loading;
 
   AuthProvider() {
+    ApiService.onUnauthorized = () => logout();
     _restoreSession();
   }
 

@@ -182,6 +182,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_loading) return;
     if (!_formKey.currentState!.validate()) {
       final phone = _phoneCtrl.text.trim();
       if (phone.isNotEmpty && !phone.startsWith('+55')) {

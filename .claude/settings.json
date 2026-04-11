@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Read(//c/Projects/real_estate_app/**)",
+      "Bash(xargs ls:*)"
     ]
   }
 }

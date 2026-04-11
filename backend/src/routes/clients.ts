@@ -140,7 +140,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   if (!client) { res.status(404).json({ error: 'Client not found' }); return; }
 
-  // Delete in reverse FK order: send_log -> follow_up_messages -> clients
+  // Delete in reverse FK order: send_log -> follow_up_messages -> cold_clients -> clients
   const { data: msgs } = await supabase
     .from('follow_up_messages')
     .select('id')
@@ -151,6 +151,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await supabase.from('send_log').delete().in('message_id', msgIds);
   }
   await supabase.from('follow_up_messages').delete().eq('client_id', clientId);
+  await supabase.from('cold_clients').delete().eq('client_id', clientId);
   await supabase.from('clients').delete().eq('id', clientId);
 
   res.json({ ok: true });
