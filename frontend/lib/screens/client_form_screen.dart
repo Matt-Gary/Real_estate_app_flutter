@@ -28,7 +28,8 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       List.generate(5, (_) => GlobalKey<FormFieldState<String?>>());
 
   List<dynamic> _propertyLinks = [];
-  String? _selectedPropertyLinkId;
+  // Positions 1-5; index 0 = position 1
+  final List<String?> _selectedLinkIds = List.filled(5, null);
 
   bool _loading = false;
   bool _loadingData = true;
@@ -50,8 +51,16 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       _nameCtrl.text = c['name'] ?? '';
       _phoneCtrl.text = c['phone_number'] ?? '';
       _emailCtrl.text = c['email'] ?? '';
-      _selectedPropertyLinkId = c['property_link_id'];
       _notesCtrl.text = c['notes'] ?? '';
+      // Pre-fill assigned property links sorted by position
+      final links = (c['client_property_links'] as List<dynamic>? ?? [])
+        ..sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
+      for (final link in links) {
+        final pos = (link['position'] as int) - 1; // convert to 0-based index
+        if (pos >= 0 && pos < 5) {
+          _selectedLinkIds[pos] = link['property_link_id'] as String?;
+        }
+      }
     }
 
     try {
@@ -249,11 +258,22 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     try {
       late String clientId;
 
+      // Build property_links array from non-null slots
+      final propertyLinksData = <Map<String, dynamic>>[];
+      for (int i = 0; i < 5; i++) {
+        if (_selectedLinkIds[i] != null) {
+          propertyLinksData.add({
+            'property_link_id': _selectedLinkIds[i],
+            'position': i + 1,
+          });
+        }
+      }
+
       final clientData = {
         'name': _nameCtrl.text.trim(),
         'phone_number': _phoneCtrl.text.trim(),
         'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-        'property_link_id': _selectedPropertyLinkId,
+        'property_links': propertyLinksData,
         'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       };
 
@@ -365,29 +385,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                       ),
                     ),
                     _field(_emailCtrl, 'Email', hint: 'client@email.com'),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DropdownButtonFormField<String?>(
-                        initialValue: _selectedPropertyLinkId,
-                        decoration: const InputDecoration(
-                          labelText: 'Propriedade',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.home_work_outlined, size: 18),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('— nenhuma —'),
-                          ),
-                          ..._propertyLinks.map((pl) => DropdownMenuItem<String?>(
-                                value: pl['id'] as String,
-                                child: Text(pl['description'] as String),
-                              )),
-                        ],
-                        onChanged: (id) =>
-                            setState(() => _selectedPropertyLinkId = id),
-                      ),
-                    ),
+                    ..._buildLinkSlots(),
                     _field(_notesCtrl, 'Observações', maxLines: 3),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -402,7 +400,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                     _sectionTitle('Mensagens de Follow-up'),
                     const SizedBox(height: 4),
                     Text(
-                      'Placeholders: {name}  {property_link}  {email}',
+                      'Placeholders: {name}  {email}  {link_1}  {link_2}  {link_3}',
                       style: Theme.of(
                         context,
                       ).textTheme.bodySmall?.copyWith(color: Colors.grey),
@@ -448,6 +446,50 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
             : null,
       ),
     );
+  }
+
+  /// Returns the visible link slot dropdowns.
+  /// Always shows all filled slots + one empty slot (up to 5).
+  List<Widget> _buildLinkSlots() {
+    // Determine how many slots to show: last filled index + 1 empty, min 1
+    int lastFilled = -1;
+    for (int i = 0; i < 5; i++) {
+      if (_selectedLinkIds[i] != null) lastFilled = i;
+    }
+    final visibleCount = (lastFilled + 2).clamp(1, 5);
+
+    return List.generate(visibleCount, (i) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DropdownButtonFormField<String?>(
+          initialValue: _selectedLinkIds[i],
+          decoration: InputDecoration(
+            labelText: 'Imóvel ${i + 1}',
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.home_work_outlined, size: 18),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('— nenhum —'),
+            ),
+            ..._propertyLinks.map((pl) => DropdownMenuItem<String?>(
+                  value: pl['id'] as String,
+                  child: Text(pl['description'] as String),
+                )),
+          ],
+          onChanged: (id) => setState(() {
+            _selectedLinkIds[i] = id;
+            // Clear downstream slots when a slot is cleared
+            if (id == null) {
+              for (int j = i + 1; j < 5; j++) {
+                _selectedLinkIds[j] = null;
+              }
+            }
+          }),
+        ),
+      );
+    });
   }
 
   Widget _messageBlock(int index) {

@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.get('/', async (req: Request, res: Response) => {
   const { data: clients, error: clientsError } = await supabase
     .from('clients')
-    .select('*')
+    .select('*, client_property_links(position, property_link_id, property_links(id, link, description))')
     .eq('agent_id', req.agentId!)
     .order('created_at', { ascending: false });
 
@@ -42,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from('clients')
-    .select('*')
+    .select('*, client_property_links(position, property_link_id, property_links(id, link, description))')
     .eq('id', req.params.id)
     .eq('agent_id', req.agentId!)
     .single();
@@ -53,7 +53,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/clients
 router.post('/', async (req: Request, res: Response) => {
-  const { name, phone_number, email, property_link_id, notes } = req.body;
+  const { name, phone_number, email, property_links, notes } = req.body;
 
   if (!name || !phone_number) {
     res.status(400).json({ error: 'name and phone_number are required' });
@@ -66,21 +66,30 @@ router.post('/', async (req: Request, res: Response) => {
       agent_id: req.agentId!,
       name,
       phone_number,
-      email:            email            ?? null,
-      property_link_id: property_link_id ?? null,
-      notes:            notes            ?? null,
+      email: email ?? null,
+      notes: notes ?? null,
     })
     .select()
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  if (Array.isArray(property_links) && property_links.length > 0) {
+    const linkRows = property_links.map((pl: any) => ({
+      client_id:        data.id,
+      property_link_id: pl.property_link_id,
+      position:         pl.position,
+    }));
+    await supabase.from('client_property_links').insert(linkRows);
+  }
+
   res.status(201).json(data);
   nudgeScheduler();
 });
 
 // PATCH /api/clients/:id
 router.patch('/:id', async (req: Request, res: Response) => {
-  const allowed = ['name', 'phone_number', 'email', 'property_link_id', 'notes'];
+  const allowed = ['name', 'phone_number', 'email', 'notes'];
   const updates: Record<string, any> = {};
   for (const key of allowed) {
     if (key in req.body) updates[key] = req.body[key];
@@ -95,6 +104,20 @@ router.patch('/:id', async (req: Request, res: Response) => {
     .single();
 
   if (error || !data) { res.status(404).json({ error: 'Client not found' }); return; }
+
+  if ('property_links' in req.body) {
+    await supabase.from('client_property_links').delete().eq('client_id', req.params.id);
+    const property_links = req.body.property_links;
+    if (Array.isArray(property_links) && property_links.length > 0) {
+      const linkRows = property_links.map((pl: any) => ({
+        client_id:        req.params.id,
+        property_link_id: pl.property_link_id,
+        position:         pl.position,
+      }));
+      await supabase.from('client_property_links').insert(linkRows);
+    }
+  }
+
   res.json(data);
 });
 

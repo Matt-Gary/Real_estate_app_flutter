@@ -58,10 +58,14 @@ export async function checkInstanceStatus(): Promise<Record<string, any>> {
 }
 
 // Mirrors Python evolution.format_message()
-export function formatMessage(body: string, client: Record<string, any>): string {
-  const pl = client.property_links;     // joined property_links row or null
-  return body
-    .replace(/\{name\}/g, client.name ?? '')
-    .replace(/\{property_link\}/g, pl?.link ?? '')
-    .replace(/\{email\}/g, client.email ?? '');
+// links[0] = position-1 link, links[1] = position-2, etc.
+export function formatMessage(body: string, client: Record<string, any>, links: string[] = []): string {
+  let result = body
+    .replace(/\{name\}/g,          client.name ?? '')
+    .replace(/\{property_link\}/g, links[0] ?? '')   // backwards-compat alias for {link_1}
+    .replace(/\{email\}/g,         client.email ?? '');
+  links.forEach((url, i) => {
+    result = result.replace(new RegExp(`\\{link_${i + 1}\\}`, 'g'), url);
+  });
+  return result;
 }

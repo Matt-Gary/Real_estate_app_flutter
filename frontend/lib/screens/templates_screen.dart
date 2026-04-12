@@ -324,8 +324,10 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                 children:
                                     [
                                       '{name}',
-                                      '{property_link}',
                                       '{email}',
+                                      '{link_1}',
+                                      '{link_2}',
+                                      '{link_3}',
                                     ].map((ph) {
                                       return ActionChip(
                                         label: Text(

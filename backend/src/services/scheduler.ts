@@ -10,7 +10,7 @@ async function fetchDueColdClients() {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('cold_clients')
-    .select('*, clients!inner(name, phone_number, is_active, email, property_link_id, property_links(link))')
+    .select('*, clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link)))')
     .eq('is_active', true)
     .lte('next_send_at', now);
 
@@ -38,7 +38,10 @@ async function sendColdBatch(rows: any[]) {
       continue;
     }
 
-    const formatted = formatMessage(body, client);
+    const rawLinks = (client.client_property_links ?? [])
+      .sort((a: any, b: any) => a.position - b.position)
+      .map((cpl: any) => cpl.property_links?.link ?? '');
+    const formatted = formatMessage(body, client, rawLinks);
     const { success, error } = await sendTextMessage(client.phone_number ?? '', formatted);
 
     if (success) {
@@ -70,7 +73,7 @@ async function fetchPendingDueMessages() {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('follow_up_messages')
-    .select('*, clients!inner(name, phone_number, is_active, email, property_link_id, property_links(link))')
+    .select('*, clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link)))')
     .eq('status', 'pending')
     .lte('send_at', now)
     .order('send_at');
@@ -82,7 +85,7 @@ async function fetchPendingDueMessages() {
 async function fetchNextPendingPerClient() {
   const { data, error } = await supabase
     .from('follow_up_messages')
-    .select('*, clients!inner(name, phone_number, is_active, email, property_link_id, property_links(link))')
+    .select('*, clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link)))')
     .eq('status', 'pending')
     .order('client_id')
     .order('seq');
@@ -104,7 +107,10 @@ async function fetchNextPendingPerClient() {
 async function sendBatch(messages: any[]) {
   for (const msg of messages) {
     const client = msg.clients ?? {};
-    const body   = formatMessage(msg.body, client);
+    const rawLinks = (client.client_property_links ?? [])
+      .sort((a: any, b: any) => a.position - b.position)
+      .map((cpl: any) => cpl.property_links?.link ?? '');
+    const body   = formatMessage(msg.body, client, rawLinks);
     const phone  = client.phone_number ?? '';
 
     const { success, statusCode, error } = await sendTextMessage(phone, body);
