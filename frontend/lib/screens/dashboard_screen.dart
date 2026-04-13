@@ -20,14 +20,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final stats = await ApiService.getDashboardStats();
-      setState(() { _stats = stats; });
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+      });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -43,9 +50,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -61,11 +68,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(
             children: [
-              Text('Dashboard',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Dashboard',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const Spacer(),
               OutlinedButton.icon(
                 onPressed: _loading ? null : _load,
@@ -73,23 +81,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: const Text('Atualizar'),
               ),
               const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _sending ? null : _sendNow,
-                icon: _sending
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.send, size: 18),
-                label: const Text('Enviar Agora'),
-                style: FilledButton.styleFrom(backgroundColor: Colors.green[700]),
-              ),
             ],
           ),
           const SizedBox(height: 24),
-          if (_loading) const Center(child: CircularProgressIndicator())
-          else if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red))
-          else if (_stats != null) _buildStats(),
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_error != null)
+            Text(_error!, style: const TextStyle(color: Colors.red))
+          else if (_stats != null)
+            _buildStats(),
         ],
       ),
     );
@@ -97,17 +97,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildStats() {
     final s = _stats!;
-    final waState = (s['waStatus']?['instance']?['state'] ??
-        s['waStatus']?['state'] ?? 'unknown') as String;
+    final waState =
+        (s['waStatus']?['instance']?['state'] ??
+                s['waStatus']?['state'] ??
+                'unknown')
+            as String;
     final waColor = waState == 'open' ? Colors.green : Colors.red;
 
     final statCards = [
-      _StatData('Total de Clientes', s['total'],     const Color(0xFF7F77DD)),
-      _StatData('Ativos',        s['active'],    Colors.green),
-      _StatData('Respondidos',       s['replied'],   Colors.grey),
-      _StatData('Enviados',     s['sent'],      const Color(0xFF3B8BD4)),
-      _StatData('Pendentes',       s['pending'],   Colors.orange),
-      _StatData('Falhas',        s['failed'],    Colors.red),
+      _StatData('Total de Clientes', s['total'], const Color(0xFF7F77DD)),
+      _StatData('Ativos', s['active'], Colors.green),
+      _StatData('Respondidos', s['replied'], Colors.grey),
+      _StatData('Enviados', s['sent'], const Color(0xFF3B8BD4)),
+      _StatData('Pendentes', s['pending'], Colors.orange),
+      _StatData('Falhas', s['failed'], Colors.red),
     ];
 
     return Column(
@@ -121,7 +124,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 32),
         Row(
           children: [
-            const Text('WhatsApp: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'WhatsApp: ',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             Icon(Icons.circle, size: 12, color: waColor),
             const SizedBox(width: 6),
             Text(waState, style: TextStyle(color: waColor)),
@@ -161,13 +167,18 @@ class _StatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${data.value}',
-              style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: data.color)),
-          Text(data.label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          Text(
+            '${data.value}',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: data.color,
+            ),
+          ),
+          Text(
+            data.label,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
         ],
       ),
     );

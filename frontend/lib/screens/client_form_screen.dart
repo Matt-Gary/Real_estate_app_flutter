@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import 'templates_screen.dart';
 
 class ClientFormScreen extends StatefulWidget {
   final dynamic client; // null = new client
@@ -16,11 +17,19 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _linkCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
   late List<TextEditingController> _bodyCtrl;
   late List<DateTime?> _sendAt;
+
+  List<dynamic> _templates = [];
+  List<String?> _selectedTemplateIds = List.generate(5, (_) => null);
+  final List<GlobalKey<FormFieldState<String?>>> _dropdownKeys =
+      List.generate(5, (_) => GlobalKey<FormFieldState<String?>>());
+
+  List<dynamic> _propertyLinks = [];
+  // Positions 1-5; index 0 = position 1
+  final List<String?> _selectedLinkIds = List.filled(5, null);
 
   bool _loading = false;
   bool _loadingData = true;
@@ -42,11 +51,28 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       _nameCtrl.text = c['name'] ?? '';
       _phoneCtrl.text = c['phone_number'] ?? '';
       _emailCtrl.text = c['email'] ?? '';
-      _linkCtrl.text = c['property_link'] ?? '';
       _notesCtrl.text = c['notes'] ?? '';
+      // Pre-fill assigned property links sorted by position
+      final links = (c['client_property_links'] as List<dynamic>? ?? [])
+        ..sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
+      for (final link in links) {
+        final pos = (link['position'] as int) - 1; // convert to 0-based index
+        if (pos >= 0 && pos < 5) {
+          _selectedLinkIds[pos] = link['property_link_id'] as String?;
+        }
+      }
     }
 
     try {
+      // Always load agent templates and property links for the dropdowns
+      final results = await Future.wait([
+        ApiService.getTemplates(),
+        ApiService.getPropertyLinks(),
+      ]);
+      final templates = results[0];
+      _templates = templates;
+      _propertyLinks = results[1];
+
       if (_isEdit) {
         final msgs = await ApiService.getMessages(widget.client['id']);
         for (final m in msgs) {
@@ -56,16 +82,15 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           _sendAt[seq] = DateTime.parse(m['send_at']).toLocal();
         }
       } else {
-        final templates = await ApiService.getTemplates();
-        for (final t in templates) {
-          final seq = (t['seq'] as int) - 1;
-          if (seq < 0 || seq > 4) continue;
-          _bodyCtrl[seq].text = t['body'] ?? '';
+        // Pre-fill slots with templates in order
+        for (int i = 0; i < templates.length && i < 5; i++) {
+          _bodyCtrl[i].text = templates[i]['body'] ?? '';
+          _selectedTemplateIds[i] = templates[i]['id'] as String;
         }
       }
     } catch (_) {}
 
-    setState(() => _loadingData = false);
+    if (mounted) setState(() => _loadingData = false);
   }
 
   @override
@@ -73,7 +98,6 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
-    _linkCtrl.dispose();
     _notesCtrl.dispose();
     for (final c in _bodyCtrl) {
       c.dispose();
@@ -106,6 +130,26 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       time.hour,
       time.minute,
     );
+
+    // Validate that selected time is not in the past
+    if (picked.isBefore(DateTime.now())) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
+          title: const Text('Horário inválido'),
+          content: const Text('O horário selecionado já passou. Escolha um horário futuro.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     // Validate against previous non-null message
     int prevIndex = -1;
@@ -173,6 +217,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_loading) return;
     if (!_formKey.currentState!.validate()) {
       final phone = _phoneCtrl.text.trim();
       if (phone.isNotEmpty && !phone.startsWith('+55')) {
@@ -233,13 +278,22 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     try {
       late String clientId;
 
+      // Build property_links array from non-null slots
+      final propertyLinksData = <Map<String, dynamic>>[];
+      for (int i = 0; i < 5; i++) {
+        if (_selectedLinkIds[i] != null) {
+          propertyLinksData.add({
+            'property_link_id': _selectedLinkIds[i],
+            'position': i + 1,
+          });
+        }
+      }
+
       final clientData = {
         'name': _nameCtrl.text.trim(),
         'phone_number': _phoneCtrl.text.trim(),
         'email': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
-        'property_link': _linkCtrl.text.trim().isEmpty
-            ? null
-            : _linkCtrl.text.trim(),
+        'property_links': propertyLinksData,
         'notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       };
 
@@ -254,6 +308,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       final messages = <Map<String, dynamic>>[];
       for (int i = 0; i < 5; i++) {
         if (_sendAt[i] != null) {
+          if (_bodyCtrl[i].text.trim().isEmpty) {
+            setState(() => _error = 'Mensagem ${i + 1} está agendada mas sem conteúdo.');
+            return;
+          }
           messages.add({
             'seq': i + 1,
             'body': _bodyCtrl[i].text,
@@ -351,11 +409,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                       ),
                     ),
                     _field(_emailCtrl, 'Email', hint: 'client@email.com'),
-                    _field(
-                      _linkCtrl,
-                      'Link da propriedade',
-                      hint: 'https://...',
-                    ),
+                    ..._buildLinkSlots(),
                     _field(_notesCtrl, 'Observações', maxLines: 3),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -370,12 +424,12 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                     _sectionTitle('Mensagens de Follow-up'),
                     const SizedBox(height: 4),
                     Text(
-                      'Placeholders: {name}  {property_link}  {email}',
+                      'Placeholders: {name}  {email}  {link_1}  {link_2}  {link_3}',
                       style: Theme.of(
                         context,
                       ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     ...List.generate(5, _messageBlock),
                   ],
                 ),
@@ -418,6 +472,50 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     );
   }
 
+  /// Returns the visible link slot dropdowns.
+  /// Always shows all filled slots + one empty slot (up to 5).
+  List<Widget> _buildLinkSlots() {
+    // Determine how many slots to show: last filled index + 1 empty, min 1
+    int lastFilled = -1;
+    for (int i = 0; i < 5; i++) {
+      if (_selectedLinkIds[i] != null) lastFilled = i;
+    }
+    final visibleCount = (lastFilled + 2).clamp(1, 5);
+
+    return List.generate(visibleCount, (i) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DropdownButtonFormField<String?>(
+          initialValue: _selectedLinkIds[i],
+          decoration: InputDecoration(
+            labelText: 'Imóvel ${i + 1}',
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.home_work_outlined, size: 18),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('— nenhum —'),
+            ),
+            ..._propertyLinks.map((pl) => DropdownMenuItem<String?>(
+                  value: pl['id'] as String,
+                  child: Text(pl['description'] as String),
+                )),
+          ],
+          onChanged: (id) => setState(() {
+            _selectedLinkIds[i] = id;
+            // Clear downstream slots when a slot is cleared
+            if (id == null) {
+              for (int j = i + 1; j < 5; j++) {
+                _selectedLinkIds[j] = null;
+              }
+            }
+          }),
+        ),
+      );
+    });
+  }
+
   Widget _messageBlock(int index) {
     final fmt = DateFormat('MMM d, yyyy  HH:mm');
     return Card(
@@ -427,6 +525,69 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_templates.isNotEmpty) ...[
+              DropdownButtonFormField<String>(
+                key: _dropdownKeys[index],
+                initialValue: _selectedTemplateIds[index],
+                isDense: true,
+                decoration: const InputDecoration(
+                  labelText: 'Usar template',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.article_outlined, size: 18),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('— nenhum —'),
+                  ),
+                  ..._templates.map((t) => DropdownMenuItem<String>(
+                        value: t['id'] as String,
+                        child: Text(t['name'] as String),
+                      )),
+                  const DropdownMenuItem<String>(
+                    value: '__ADD_TEMPLATE__',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add, size: 16, color: Colors.blue),
+                        SizedBox(width: 6),
+                        Text(
+                          'Adicionar template',
+                          style: TextStyle(color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                onChanged: (id) async {
+                  if (id == '__ADD_TEMPLATE__') {
+                    _dropdownKeys[index].currentState?.reset();
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TemplatesScreen()),
+                    );
+                    if (!mounted) return;
+                    final fresh = await ApiService.getTemplates();
+                    if (!mounted) return;
+                    setState(() => _templates = fresh);
+                    return;
+                  }
+                  setState(() {
+                    _selectedTemplateIds[index] = id;
+                    if (id != null) {
+                      final template = _templates.cast<Map<String, dynamic>>().firstWhere(
+                        (t) => t['id'] == id,
+                        orElse: () => {},
+                      );
+                      if (template.isNotEmpty) {
+                        _bodyCtrl[index].text = template['body'] ?? '';
+                      }
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
             Text(
               'Mensagem ${index + 1}',
               style: const TextStyle(fontWeight: FontWeight.bold),

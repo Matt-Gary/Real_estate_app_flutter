@@ -11,11 +11,27 @@ export interface Client {
   name: string;
   phone_number: string;
   email: string | null;
-  property_link: string | null;
   is_active: boolean;
   replied_at: string | null;
   created_at: string;
   notes: string | null;
+}
+
+export interface ClientPropertyLink {
+  id: string;
+  client_id: string;
+  property_link_id: string;
+  position: number;        // 1–5
+  created_at: string;
+}
+
+export interface PropertyLink {
+  id: string;
+  agent_id: string;
+  link: string;
+  short_code: string;
+  description: string;
+  created_at: string;
 }
 
 export interface FollowUpMessage {

@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.get('/', async (req: Request, res: Response) => {
   const { data: clients, error: clientsError } = await supabase
     .from('clients')
-    .select('*')
+    .select('*, client_property_links(position, property_link_id, property_links(id, link, description))')
     .eq('agent_id', req.agentId!)
     .order('created_at', { ascending: false });
 
@@ -42,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from('clients')
-    .select('*')
+    .select('*, client_property_links(position, property_link_id, property_links(id, link, description))')
     .eq('id', req.params.id)
     .eq('agent_id', req.agentId!)
     .single();
@@ -53,7 +53,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/clients
 router.post('/', async (req: Request, res: Response) => {
-  const { name, phone_number, email, property_link, notes } = req.body;
+  const { name, phone_number, email, property_links, notes } = req.body;
 
   if (!name || !phone_number) {
     res.status(400).json({ error: 'name and phone_number are required' });
@@ -66,21 +66,34 @@ router.post('/', async (req: Request, res: Response) => {
       agent_id: req.agentId!,
       name,
       phone_number,
-      email:         email         ?? null,
-      property_link: property_link ?? null,
-      notes:         notes         ?? null,
+      email: email ?? null,
+      notes: notes ?? null,
     })
     .select()
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  if (Array.isArray(property_links) && property_links.length > 0) {
+    const linkRows = property_links.map((pl: any) => ({
+      client_id:        data.id,
+      property_link_id: pl.property_link_id,
+      position:         pl.position,
+    }));
+    const { error: linkError } = await supabase.from('client_property_links').insert(linkRows);
+    if (linkError) {
+      console.error('[POST /clients] property_links insert failed', linkError);
+      // Client was created; report partial success so caller can retry links
+    }
+  }
+
   res.status(201).json(data);
   nudgeScheduler();
 });
 
 // PATCH /api/clients/:id
 router.patch('/:id', async (req: Request, res: Response) => {
-  const allowed = ['name', 'phone_number', 'email', 'property_link', 'notes'];
+  const allowed = ['name', 'phone_number', 'email', 'notes'];
   const updates: Record<string, any> = {};
   for (const key of allowed) {
     if (key in req.body) updates[key] = req.body[key];
@@ -95,6 +108,29 @@ router.patch('/:id', async (req: Request, res: Response) => {
     .single();
 
   if (error || !data) { res.status(404).json({ error: 'Client not found' }); return; }
+
+  if ('property_links' in req.body) {
+    const { error: delLinkError } = await supabase
+      .from('client_property_links').delete().eq('client_id', req.params.id);
+    if (delLinkError) {
+      console.error('[PATCH /clients] property_links delete failed', delLinkError);
+      res.status(500).json({ error: 'Failed to update property links' }); return;
+    }
+    const property_links = req.body.property_links;
+    if (Array.isArray(property_links) && property_links.length > 0) {
+      const linkRows = property_links.map((pl: any) => ({
+        client_id:        req.params.id,
+        property_link_id: pl.property_link_id,
+        position:         pl.position,
+      }));
+      const { error: insLinkError } = await supabase.from('client_property_links').insert(linkRows);
+      if (insLinkError) {
+        console.error('[PATCH /clients] property_links insert failed', insLinkError);
+        res.status(500).json({ error: 'Failed to save property links' }); return;
+      }
+    }
+  }
+
   res.json(data);
 });
 
@@ -140,7 +176,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   if (!client) { res.status(404).json({ error: 'Client not found' }); return; }
 
-  // Delete in reverse FK order: send_log -> follow_up_messages -> clients
+  // Delete in reverse FK order: send_log -> follow_up_messages -> cold_clients -> clients
   const { data: msgs } = await supabase
     .from('follow_up_messages')
     .select('id')
@@ -148,10 +184,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   const msgIds = (msgs ?? []).map((m: any) => m.id);
   if (msgIds.length > 0) {
-    await supabase.from('send_log').delete().in('message_id', msgIds);
+    const { error: slErr } = await supabase.from('send_log').delete().in('message_id', msgIds);
+    if (slErr) { console.error('[DELETE /clients] send_log delete failed', slErr); res.status(500).json({ error: 'Failed to delete client data' }); return; }
   }
-  await supabase.from('follow_up_messages').delete().eq('client_id', clientId);
-  await supabase.from('clients').delete().eq('id', clientId);
+
+  const { error: fupErr } = await supabase.from('follow_up_messages').delete().eq('client_id', clientId);
+  if (fupErr) { console.error('[DELETE /clients] follow_up_messages delete failed', fupErr); res.status(500).json({ error: 'Failed to delete client data' }); return; }
+
+  const { error: ccErr } = await supabase.from('cold_clients').delete().eq('client_id', clientId);
+  if (ccErr) { console.error('[DELETE /clients] cold_clients delete failed', ccErr); res.status(500).json({ error: 'Failed to delete client data' }); return; }
+
+  const { error: cErr } = await supabase.from('clients').delete().eq('id', clientId);
+  if (cErr) { console.error('[DELETE /clients] clients delete failed', cErr); res.status(500).json({ error: 'Failed to delete client' }); return; }
 
   res.json({ ok: true });
 });

@@ -118,7 +118,9 @@ class _LoginScreenState extends State<LoginScreen>
       body: Center(
         child: SingleChildScrollView(
           child: Container(
-            width: 400,
+            width: MediaQuery.of(context).size.width < 440
+                ? MediaQuery.of(context).size.width * 0.9
+                : 400,
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
