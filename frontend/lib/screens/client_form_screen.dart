@@ -90,7 +90,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       }
     } catch (_) {}
 
-    setState(() => _loadingData = false);
+    if (mounted) setState(() => _loadingData = false);
   }
 
   @override
@@ -130,6 +130,26 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       time.hour,
       time.minute,
     );
+
+    // Validate that selected time is not in the past
+    if (picked.isBefore(DateTime.now())) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
+          title: const Text('Horário inválido'),
+          content: const Text('O horário selecionado já passou. Escolha um horário futuro.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     // Validate against previous non-null message
     int prevIndex = -1;
@@ -288,6 +308,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       final messages = <Map<String, dynamic>>[];
       for (int i = 0; i < 5; i++) {
         if (_sendAt[i] != null) {
+          if (_bodyCtrl[i].text.trim().isEmpty) {
+            setState(() => _error = 'Mensagem ${i + 1} está agendada mas sem conteúdo.');
+            return;
+          }
           messages.add({
             'seq': i + 1,
             'body': _bodyCtrl[i].text,
@@ -544,6 +568,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                     );
                     if (!mounted) return;
                     final fresh = await ApiService.getTemplates();
+                    if (!mounted) return;
                     setState(() => _templates = fresh);
                     return;
                   }

@@ -3,7 +3,10 @@
     "allow": [
       "Bash(git init:*)",
       "Read(//c/Projects/real_estate_app/**)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(grep -n \"validate\\\\|trim\\\\|filter\\\\|sanitize\" /c/Projects/real_estate_app/Real_estate_app_flutter/backend/src/routes/*.ts)",
+      "Bash(flutter analyze:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

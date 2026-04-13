@@ -85,7 +85,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     .eq('agent_id', req.agentId);   // ownership check
 
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ success: true });
+  res.json({ ok: true });
 });
 
 export default router;

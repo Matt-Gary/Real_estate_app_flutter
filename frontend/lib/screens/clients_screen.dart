@@ -28,7 +28,9 @@ class _ClientsScreenState extends State<ClientsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() => setState(() {}));
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) setState(() {});
+    });
     _loadAll();
   }
 
@@ -47,11 +49,13 @@ class _ClientsScreenState extends State<ClientsScreen>
     });
     try {
       final c = await ApiService.getClients();
+      if (!mounted) return;
       setState(() => _clients = c);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -62,11 +66,13 @@ class _ClientsScreenState extends State<ClientsScreen>
     });
     try {
       final c = await ApiService.getColdClients();
+      if (!mounted) return;
       setState(() => _coldClients = c);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _coldError = e.toString());
     } finally {
-      setState(() => _coldLoading = false);
+      if (mounted) setState(() => _coldLoading = false);
     }
   }
 
@@ -95,7 +101,7 @@ class _ClientsScreenState extends State<ClientsScreen>
     if (ok != true) return;
     try {
       await ApiService.markClientReplied(client['id']);
-      _load();
+      if (mounted) _load();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -129,6 +135,7 @@ class _ClientsScreenState extends State<ClientsScreen>
     if (ok != true) return;
     try {
       await ApiService.deleteClient(client['id']);
+      if (!mounted) return;
       setState(() => _selectedIds.remove(client['id'] as String));
       _load();
     } catch (e) {
@@ -145,7 +152,7 @@ class _ClientsScreenState extends State<ClientsScreen>
       context,
       MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
     );
-    _load();
+    if (mounted) _load();
   }
 
   Future<void> _resetClientMessages(dynamic client) async {
@@ -178,7 +185,7 @@ class _ClientsScreenState extends State<ClientsScreen>
           MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
         );
       }
-      _load();
+      if (mounted) _load();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -222,7 +229,7 @@ class _ClientsScreenState extends State<ClientsScreen>
       await ApiService.updateColdClient(cold['id'] as String, {
         'is_active': !(cold['is_active'] as bool),
       });
-      _loadCold();
+      if (mounted) _loadCold();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -257,6 +264,7 @@ class _ClientsScreenState extends State<ClientsScreen>
     if (ok != true) return;
     try {
       await ApiService.deleteColdClient(cold['id'] as String);
+      if (!mounted) return;
       final client = await ApiService.getClient(cold['client_id'] as String);
       if (mounted) {
         await Navigator.push(
@@ -264,7 +272,7 @@ class _ClientsScreenState extends State<ClientsScreen>
           MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
         );
       }
-      _loadAll();
+      if (mounted) _loadAll();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -298,7 +306,7 @@ class _ClientsScreenState extends State<ClientsScreen>
     if (ok != true) return;
     try {
       await ApiService.deleteClient(cold['client_id'] as String);
-      _loadAll();
+      if (mounted) _loadAll();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -782,6 +790,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
   Future<void> _loadTemplates() async {
     try {
       final t = await ApiService.getTemplates();
+      if (!mounted) return;
       setState(() {
         _templates = t;
         // If the pre-selected template no longer exists in the list, clear it
@@ -819,15 +828,27 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
     );
     if (time == null || !mounted) return;
 
-    setState(() {
-      _firstSendAt = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
+    final picked = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+
+    if (picked.isBefore(DateTime.now())) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'O horário selecionado já passou. Escolha um horário futuro.',
+          ),
+        ),
       );
-    });
+      return;
+    }
+
+    setState(() => _firstSendAt = picked);
   }
 
   Future<void> _save() async {

@@ -60,12 +60,16 @@ export async function checkInstanceStatus(): Promise<Record<string, any>> {
 // Mirrors Python evolution.format_message()
 // links[0] = position-1 link, links[1] = position-2, etc.
 export function formatMessage(body: string, client: Record<string, any>, links: string[] = []): string {
+  // Use function replacements to prevent $ in values being treated as special patterns
+  // (e.g. $& means "matched substring", $` means "before match", etc.)
+  const name  = client.name  ?? '';
+  const email = client.email ?? '';
   let result = body
-    .replace(/\{name\}/g,          client.name ?? '')
-    .replace(/\{property_link\}/g, links[0] ?? '')   // backwards-compat alias for {link_1}
-    .replace(/\{email\}/g,         client.email ?? '');
+    .replace(/\{name\}/g,          () => name)
+    .replace(/\{property_link\}/g, () => links[0] ?? '')   // backwards-compat alias for {link_1}
+    .replace(/\{email\}/g,         () => email);
   links.forEach((url, i) => {
-    result = result.replace(new RegExp(`\\{link_${i + 1}\\}`, 'g'), url);
+    result = result.replace(new RegExp(`\\{link_${i + 1}\\}`, 'g'), () => url);
   });
   return result;
 }

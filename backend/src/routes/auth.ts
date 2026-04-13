@@ -39,7 +39,8 @@ router.post('/register', async (req: Request, res: Response) => {
     .single();
 
   if (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[register]', error);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
     return;
   }
 
@@ -132,28 +133,47 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
   res.json({ message: 'If that email exists, a reset link was sent.' });
 });
 
-// POST /api/auth/reset-passwordd
+// POST /api/auth/reset-password
 router.post('/reset-password', async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword) { res.status(400).json({ error: 'Token and new password are required' }); return; }
   if (newPassword.length < 8) { res.status(400).json({ error: 'Password must be at least 8 characters' }); return; }
 
-  const { data: record } = await supabase
+  // Atomically claim the token in a single UPDATE — prevents race condition where
+  // two concurrent requests both read "unused" before either marks it used.
+  const { data: record, error: claimError } = await supabase
     .from('password_reset_tokens')
-    .select('id, agent_id, expires_at, used_at')
+    .update({ used_at: new Date().toISOString() })
     .eq('token', token)
+    .is('used_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .select('id, agent_id')
     .maybeSingle();
 
-  if (!record) { res.status(400).json({ error: 'Invalid or expired reset token' }); return; }
-  if (record.used_at) { res.status(400).json({ error: 'This reset link has already been used' }); return; }
-  if (new Date(record.expires_at) < new Date()) { res.status(400).json({ error: 'Reset link has expired' }); return; }
+  if (claimError) {
+    console.error('[reset-password]', claimError);
+    res.status(500).json({ error: 'An error occurred. Please try again.' });
+    return;
+  }
+
+  if (!record) {
+    // Could be invalid token, already used, or expired — don't distinguish to avoid info leak
+    res.status(400).json({ error: 'Invalid or expired reset token' });
+    return;
+  }
 
   const password_hash = await bcrypt.hash(newPassword, 12);
 
-  await supabase.from('agents').update({ password_hash }).eq('id', record.agent_id);
+  const { error: updateError } = await supabase
+    .from('agents')
+    .update({ password_hash })
+    .eq('id', record.agent_id);
 
-  // Mark token as used
-  await supabase.from('password_reset_tokens').update({ used_at: new Date().toISOString() }).eq('id', record.id);
+  if (updateError) {
+    console.error('[reset-password] password update failed', updateError);
+    res.status(500).json({ error: 'Failed to update password. Please try again.' });
+    return;
+  }
 
   res.json({ message: 'Password updated successfully' });
 });

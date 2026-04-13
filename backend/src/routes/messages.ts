@@ -40,6 +40,18 @@ router.put('/clients/:clientId/messages', async (req: Request, res: Response) =>
     return;
   }
 
+  // Validate each message has a non-empty body
+  for (const m of messages) {
+    if (!m.body || typeof m.body !== 'string' || m.body.trim() === '') {
+      res.status(400).json({ error: `Message ${m.seq} has an empty body` });
+      return;
+    }
+    if (!m.send_at || !m.seq) {
+      res.status(400).json({ error: 'Each message must have seq and send_at' });
+      return;
+    }
+  }
+
   // Verify ownership
   const { data: client } = await supabase
     .from('clients')
@@ -122,19 +134,22 @@ router.delete('/clients/:clientId/messages', async (req: Request, res: Response)
 
   const msgIds = (msgs ?? []).map((m: any) => m.id);
   if (msgIds.length > 0) {
-    await supabase.from('send_log').delete().in('message_id', msgIds);
+    const { error: slErr } = await supabase.from('send_log').delete().in('message_id', msgIds);
+    if (slErr) { console.error('[DELETE messages] send_log delete failed', slErr); res.status(500).json({ error: 'Failed to reset messages' }); return; }
   }
 
-  await supabase
+  const { error: fupErr } = await supabase
     .from('follow_up_messages')
     .delete()
     .eq('client_id', req.params.clientId);
+  if (fupErr) { console.error('[DELETE messages] follow_up_messages delete failed', fupErr); res.status(500).json({ error: 'Failed to reset messages' }); return; }
 
   // Ensure client is active so scheduler can pick up new messages
-  await supabase
+  const { error: activateErr } = await supabase
     .from('clients')
     .update({ is_active: true, replied_at: null })
     .eq('id', req.params.clientId);
+  if (activateErr) { console.error('[DELETE messages] client reactivation failed', activateErr); }
 
   res.json({ ok: true });
 });

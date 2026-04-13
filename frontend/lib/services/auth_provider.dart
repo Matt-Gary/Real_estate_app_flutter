@@ -17,11 +17,19 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('agent');
-    final token = prefs.getString('jwt_token');
-    if (raw != null && token != null) {
-      _agent = jsonDecode(raw);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('agent');
+      final token = prefs.getString('jwt_token');
+      if (raw != null && token != null) {
+        _agent = jsonDecode(raw);
+      }
+    } catch (_) {
+      // Corrupted stored data — clear and start fresh
+      _agent = null;
+      try {
+        await ApiService.clearToken();
+      } catch (_) {}
     }
     _loading = false;
     notifyListeners();

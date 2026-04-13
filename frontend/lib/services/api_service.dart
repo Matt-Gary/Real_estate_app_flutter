@@ -12,8 +12,19 @@ class ApiService {
   static const String baseUrl = 'http://localhost:3000/api';
   //static const String baseUrl = 'http://72.60.137.97:3001/api';
 
+  static const _timeout = Duration(seconds: 30);
+
   /// Called whenever the server returns 401. Set by AuthProvider.
   static VoidCallback? onUnauthorized;
+
+  /// Safely decodes JSON, throwing a readable exception on malformed responses.
+  static dynamic _decode(http.Response res) {
+    try {
+      return jsonDecode(res.body);
+    } catch (_) {
+      throw Exception('Invalid response from server');
+    }
+  }
 
   /// Checks the response status. Throws [UnauthorizedException] on 401,
   /// or a generic [Exception] with [fallbackMessage] for any other error status.
@@ -60,8 +71,8 @@ class ApiService {
       Uri.parse('$baseUrl/auth/forgot-password'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email}),
-    );
-    final body = jsonDecode(res.body);
+    ).timeout(_timeout);
+    final body = _decode(res);
     if (res.statusCode != 200) {
       throw Exception(body['error'] ?? 'Request failed');
     }
@@ -72,8 +83,8 @@ class ApiService {
       Uri.parse('$baseUrl/auth/reset-password'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'token': token, 'newPassword': newPassword}),
-    );
-    final body = jsonDecode(res.body);
+    ).timeout(_timeout);
+    final body = _decode(res);
     if (res.statusCode != 200) throw Exception(body['error'] ?? 'Reset failed');
   }
 
@@ -87,8 +98,8 @@ class ApiService {
       Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),
-    );
-    final data = jsonDecode(res.body);
+    ).timeout(_timeout);
+    final data = _decode(res);
     if (res.statusCode != 200) throw Exception(data['error'] ?? 'Login failed');
     return data;
   }
@@ -102,8 +113,8 @@ class ApiService {
       Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password, 'name': name}),
-    );
-    final data = jsonDecode(res.body);
+    ).timeout(_timeout);
+    final data = _decode(res);
     if (res.statusCode != 201) {
       throw Exception(data['error'] ?? 'Registration failed');
     }
@@ -116,18 +127,18 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/clients'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to load clients');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> getClient(String id) async {
     final res = await http.get(
       Uri.parse('$baseUrl/clients/$id'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Client not found');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> createClient(
@@ -137,9 +148,9 @@ class ApiService {
       Uri.parse('$baseUrl/clients'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to create client');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> updateClient(
@@ -150,16 +161,16 @@ class ApiService {
       Uri.parse('$baseUrl/clients/$id'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to update client');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<void> markClientReplied(String id) async {
     final res = await http.patch(
       Uri.parse('$baseUrl/clients/$id/replied'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to mark as replied');
   }
 
@@ -167,7 +178,7 @@ class ApiService {
     final res = await http.delete(
       Uri.parse('$baseUrl/clients/$id'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to delete client');
   }
 
@@ -177,16 +188,16 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/clients/$clientId/messages'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to load messages');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<void> resetClientMessages(String clientId) async {
     final res = await http.delete(
       Uri.parse('$baseUrl/clients/$clientId/messages'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to reset messages');
   }
 
@@ -198,9 +209,9 @@ class ApiService {
       Uri.parse('$baseUrl/clients/$clientId/messages'),
       headers: await _authHeaders(),
       body: jsonEncode({'messages': messages}),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to save messages');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   // ── Templates ──────────────────────────────────────────────────────────────
@@ -209,9 +220,9 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/templates'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to load templates');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> createTemplate(
@@ -221,9 +232,9 @@ class ApiService {
       Uri.parse('$baseUrl/templates'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to create template');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> updateTemplate(
@@ -234,16 +245,16 @@ class ApiService {
       Uri.parse('$baseUrl/templates/$id'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to update template');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<void> deleteTemplate(String id) async {
     final res = await http.delete(
       Uri.parse('$baseUrl/templates/$id'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to delete template');
   }
 
@@ -253,9 +264,9 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/cold-clients'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to load cold clients');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> createColdClient(
@@ -265,9 +276,9 @@ class ApiService {
       Uri.parse('$baseUrl/cold-clients'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to create cold client');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> updateColdClient(
@@ -278,16 +289,16 @@ class ApiService {
       Uri.parse('$baseUrl/cold-clients/$id'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to update cold client');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<void> deleteColdClient(String id) async {
     final res = await http.delete(
       Uri.parse('$baseUrl/cold-clients/$id'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to delete cold client');
   }
 
@@ -297,9 +308,9 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/property-links'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to load property links');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> createPropertyLink(
@@ -309,9 +320,9 @@ class ApiService {
       Uri.parse('$baseUrl/property-links'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to create property link');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> updatePropertyLink(
@@ -322,16 +333,16 @@ class ApiService {
       Uri.parse('$baseUrl/property-links/$id'),
       headers: await _authHeaders(),
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to update property link');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<void> deletePropertyLink(String id) async {
     final res = await http.delete(
       Uri.parse('$baseUrl/property-links/$id'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to delete property link');
   }
 
@@ -341,17 +352,17 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/dashboard/stats'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Failed to load stats');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 
   static Future<Map<String, dynamic>> sendNow() async {
     final res = await http.post(
       Uri.parse('$baseUrl/dashboard/send-now'),
       headers: await _authHeaders(),
-    );
+    ).timeout(_timeout);
     _handleResponse(res, 'Send now failed');
-    return jsonDecode(res.body);
+    return _decode(res);
   }
 }

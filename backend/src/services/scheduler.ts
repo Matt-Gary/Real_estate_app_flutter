@@ -20,49 +20,57 @@ async function fetchDueColdClients() {
 
 async function sendColdBatch(rows: any[]) {
   for (const row of rows) {
-    const client = row.clients ?? {};
+    try {
+      const client = row.clients ?? {};
 
-    // Resolve template body
-    let body = '';
-    if (row.template_id) {
-      const { data: tpl } = await supabase
-        .from('agent_templates')
-        .select('body')
-        .eq('id', row.template_id)
-        .maybeSingle();
-      body = tpl?.body ?? '';
-    }
-
-    if (!body) {
-      console.warn(`[ColdScheduler] cold_client ${row.id} has no template — skipping.`);
-      continue;
-    }
-
-    const rawLinks = (client.client_property_links ?? [])
-      .sort((a: any, b: any) => a.position - b.position)
-      .map((cpl: any) => cpl.property_links?.link ?? '');
-    const formatted = formatMessage(body, client, rawLinks);
-    const { success, error } = await sendTextMessage(client.phone_number ?? '', formatted);
-
-    if (success) {
-      const newSent = (row.messages_sent ?? 0) + 1;
-      const hitLimit = row.max_messages != null && newSent >= row.max_messages;
-      const nextSendAt = new Date(Date.now() + row.interval_days * 86_400_000).toISOString();
-
-      await supabase
-        .from('cold_clients')
-        .update({
-          messages_sent: newSent,
-          next_send_at:  hitLimit ? null : nextSendAt,
-          is_active:     !hitLimit,
-        })
-        .eq('id', row.id);
-
-      if (hitLimit) {
-        console.log(`[ColdScheduler] cold_client ${row.id} reached max_messages (${row.max_messages}) — deactivated.`);
+      // Resolve template body
+      let body = '';
+      if (row.template_id) {
+        const { data: tpl } = await supabase
+          .from('agent_templates')
+          .select('body')
+          .eq('id', row.template_id)
+          .maybeSingle();
+        body = tpl?.body ?? '';
       }
-    } else {
-      console.error(`[ColdScheduler] Failed to send cold message for ${row.id}: ${error}`);
+
+      if (!body) {
+        // Template was deleted or never set — deactivate so we don't loop forever
+        console.warn(`[ColdScheduler] cold_client ${row.id} has no template body — deactivating.`);
+        await supabase.from('cold_clients').update({ is_active: false }).eq('id', row.id);
+        continue;
+      }
+
+      const rawLinks = (client.client_property_links ?? [])
+        .sort((a: any, b: any) => a.position - b.position)
+        .map((cpl: any) => cpl.property_links?.link ?? '');
+      const formatted = formatMessage(body, client, rawLinks);
+      const { success, error } = await sendTextMessage(client.phone_number ?? '', formatted);
+
+      if (success) {
+        const newSent = (row.messages_sent ?? 0) + 1;
+        const hitLimit = row.max_messages != null && newSent >= row.max_messages;
+        const nextSendAt = new Date(Date.now() + row.interval_days * 86_400_000).toISOString();
+
+        const { error: updateErr } = await supabase
+          .from('cold_clients')
+          .update({
+            messages_sent: newSent,
+            next_send_at:  hitLimit ? null : nextSendAt,
+            is_active:     !hitLimit,
+          })
+          .eq('id', row.id);
+
+        if (updateErr) {
+          console.error(`[ColdScheduler] Failed to update cold_client ${row.id} after send:`, updateErr);
+        } else if (hitLimit) {
+          console.log(`[ColdScheduler] cold_client ${row.id} reached max_messages (${row.max_messages}) — deactivated.`);
+        }
+      } else {
+        console.error(`[ColdScheduler] Failed to send cold message for ${row.id}: ${error}`);
+      }
+    } catch (err) {
+      console.error(`[ColdScheduler] Unexpected error processing cold_client ${row.id}:`, err);
     }
   }
 }
@@ -106,33 +114,40 @@ async function fetchNextPendingPerClient() {
 
 async function sendBatch(messages: any[]) {
   for (const msg of messages) {
-    const client = msg.clients ?? {};
-    const rawLinks = (client.client_property_links ?? [])
-      .sort((a: any, b: any) => a.position - b.position)
-      .map((cpl: any) => cpl.property_links?.link ?? '');
-    const body   = formatMessage(msg.body, client, rawLinks);
-    const phone  = client.phone_number ?? '';
+    try {
+      const client = msg.clients ?? {};
+      const rawLinks = (client.client_property_links ?? [])
+        .sort((a: any, b: any) => a.position - b.position)
+        .map((cpl: any) => cpl.property_links?.link ?? '');
+      const body   = formatMessage(msg.body, client, rawLinks);
+      const phone  = client.phone_number ?? '';
 
-    const { success, statusCode, error } = await sendTextMessage(phone, body);
+      const { success, statusCode, error } = await sendTextMessage(phone, body);
 
-    if (success) {
-      await supabase
-        .from('follow_up_messages')
-        .update({ status: 'sent', sent_at: new Date().toISOString() })
-        .eq('id', msg.id);
-    } else {
-      await supabase
-        .from('follow_up_messages')
-        .update({ status: 'failed', error_detail: error ?? 'Unknown error' })
-        .eq('id', msg.id);
+      if (success) {
+        const { error: updateErr } = await supabase
+          .from('follow_up_messages')
+          .update({ status: 'sent', sent_at: new Date().toISOString() })
+          .eq('id', msg.id);
+        if (updateErr) console.error(`[Scheduler] Failed to mark message ${msg.id} as sent:`, updateErr);
+      } else {
+        const { error: updateErr } = await supabase
+          .from('follow_up_messages')
+          .update({ status: 'failed', error_detail: error ?? 'Unknown error' })
+          .eq('id', msg.id);
+        if (updateErr) console.error(`[Scheduler] Failed to mark message ${msg.id} as failed:`, updateErr);
+      }
+
+      const { error: logErr } = await supabase.from('send_log').insert({
+        message_id:      msg.id,
+        success,
+        response_status: statusCode,
+        error_detail:    error,
+      });
+      if (logErr) console.error(`[Scheduler] Failed to write send_log for message ${msg.id}:`, logErr);
+    } catch (err) {
+      console.error(`[Scheduler] Unexpected error processing message ${msg.id}:`, err);
     }
-
-    await supabase.from('send_log').insert({
-      message_id:      msg.id,
-      success,
-      response_status: statusCode,
-      error_detail:    error,
-    });
   }
 }
 
