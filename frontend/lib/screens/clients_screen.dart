@@ -751,19 +751,11 @@ class _ColdConfigDialog extends StatefulWidget {
 class _ColdConfigDialogState extends State<_ColdConfigDialog> {
   List<dynamic> _templates = [];
   String? _selectedTemplateId;
-  int _intervalDays = 14;
+  final _intervalCtrl = TextEditingController(text: '14');
   final _maxCtrl = TextEditingController();
   DateTime? _firstSendAt;
   String? _selectedClientId; // used only in directAdd mode
   bool _saving = false;
-
-  static const _intervalOptions = [
-    (label: '7 dias', days: 7),
-    (label: '14 dias', days: 14),
-    (label: '21 dias', days: 21),
-    (label: '30 dias', days: 30),
-    (label: '60 dias', days: 60),
-  ];
 
   @override
   void initState() {
@@ -771,7 +763,8 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
     _loadTemplates();
     if (widget.coldClient != null) {
       _selectedTemplateId = widget.coldClient['template_id'] as String?;
-      _intervalDays = widget.coldClient['interval_days'] as int? ?? 14;
+      _intervalCtrl.text =
+          (widget.coldClient['interval_days'] as int? ?? 14).toString();
       final max = widget.coldClient['max_messages'];
       if (max != null) _maxCtrl.text = max.toString();
       final nextRaw = widget.coldClient['next_send_at'] as String?;
@@ -783,6 +776,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
 
   @override
   void dispose() {
+    _intervalCtrl.dispose();
     _maxCtrl.dispose();
     super.dispose();
   }
@@ -870,6 +864,16 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
       return;
     }
 
+    final int? intervalDays = int.tryParse(_intervalCtrl.text.trim());
+    if (intervalDays == null || intervalDays < 1 || intervalDays > 365) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('O intervalo deve ser um número entre 1 e 365 dias.'),
+        ),
+      );
+      return;
+    }
+
     final int? maxMessages = _maxCtrl.text.trim().isEmpty
         ? null
         : int.tryParse(_maxCtrl.text.trim());
@@ -881,7 +885,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
         // Edit existing
         await ApiService.updateColdClient(widget.coldClient['id'] as String, {
           'template_id': _selectedTemplateId,
-          'interval_days': _intervalDays,
+          'interval_days': intervalDays,
           'max_messages': maxMessages,
           'next_send_at': firstSendAtUtc,
         });
@@ -895,7 +899,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
             await ApiService.createColdClient({
               'client_id': clientId,
               'template_id': _selectedTemplateId,
-              'interval_days': _intervalDays,
+              'interval_days': intervalDays,
               'max_messages': maxMessages,
               'first_send_at': firstSendAtUtc,
             });
@@ -1035,29 +1039,18 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
 
               // Interval
               const Text(
-                'Intervalo de envio',
+                'Intervalo de envio (dias)',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 6),
-              InputDecorator(
+              TextField(
+                controller: _intervalCtrl,
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   isDense: true,
-                ),
-                child: DropdownButton<int>(
-                  value: _intervalDays,
-                  isExpanded: true,
-                  underline: const SizedBox.shrink(),
-                  isDense: true,
-                  items: _intervalOptions
-                      .map(
-                        (o) => DropdownMenuItem<int>(
-                          value: o.days,
-                          child: Text(o.label),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => _intervalDays = v ?? 14),
+                  hintText: 'Ex: 14',
+                  suffixText: 'dias (1–365)',
                 ),
               ),
               const SizedBox(height: 16),

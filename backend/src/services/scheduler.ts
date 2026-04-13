@@ -15,7 +15,13 @@ async function fetchDueColdClients() {
     .lte('next_send_at', now);
 
   if (error) throw new Error(`fetchDueColdClients: ${error.message}`);
-  return (data ?? []).filter((row: any) => row.clients?.is_active === true);
+  const seenCold = new Set<string>();
+  return (data ?? []).filter((row: any) => {
+    if (!row.clients?.is_active) return false;
+    if (seenCold.has(row.id)) return false;
+    seenCold.add(row.id);
+    return true;
+  });
 }
 
 async function sendColdBatch(rows: any[]) {
@@ -87,7 +93,13 @@ async function fetchPendingDueMessages() {
     .order('send_at');
 
   if (error) throw new Error(`fetchPendingDueMessages: ${error.message}`);
-  return (data ?? []).filter((m: any) => m.clients?.is_active === true);
+  const seen = new Set<string>();
+  return (data ?? []).filter((m: any) => {
+    if (!m.clients?.is_active) return false;
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
 }
 
 async function fetchNextPendingPerClient() {
