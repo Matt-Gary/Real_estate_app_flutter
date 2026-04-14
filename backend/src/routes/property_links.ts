@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth';
 const router = Router();
 router.use(requireAuth);
 
-// GET /api/property-links
+// GET /api/property-linkss
 router.get('/', async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from('property_links')
