@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
@@ -12,6 +15,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _loading = true;
   String? _error;
   bool _sending = false;
+  bool _waConnecting = false;
 
   @override
   void initState() {
@@ -59,6 +63,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _onConnectWhatsApp() async {
+    if (_waConnecting) return;
+    setState(() => _waConnecting = true);
+    try {
+      await ApiService.whatsappConnect();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => _QrCodeDialog(
+          onConnected: () {
+            Navigator.of(ctx).pop();
+            _load();
+          },
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro ao conectar: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _waConnecting = false);
+    }
+  }
+
+  Future<void> _onDisconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Desconectar WhatsApp?'),
+        content: const Text('O número será desvinculado desta conta.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Desconectar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiService.whatsappDisconnect();
+      if (mounted) await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -102,7 +164,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 s['waStatus']?['state'] ??
                 'unknown')
             as String;
-    final waColor = waState == 'open' ? Colors.green : Colors.red;
 
     final statCards = [
       _StatData('Total de Clientes', s['total'], const Color(0xFF7F77DD)),
@@ -122,17 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: statCards.map((d) => _StatCard(data: d)).toList(),
         ),
         const SizedBox(height: 32),
-        Row(
-          children: [
-            const Text(
-              'WhatsApp: ',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Icon(Icons.circle, size: 12, color: waColor),
-            const SizedBox(width: 6),
-            Text(waState, style: TextStyle(color: waColor)),
-          ],
-        ),
+        _buildWhatsAppSection(waState),
         const SizedBox(height: 8),
         const Text(
           'Agendador: rodando — dispara automaticamente quando as mensagens estão prontas.',
@@ -141,7 +192,174 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
     );
   }
+
+  Widget _buildWhatsAppSection(String waState) {
+    if (waState == 'open') {
+      return Row(
+        children: [
+          const Text(
+            'WhatsApp: ',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Icon(Icons.circle, size: 12, color: Colors.green),
+          const SizedBox(width: 6),
+          const Text('Conectado', style: TextStyle(color: Colors.green)),
+          const SizedBox(width: 16),
+          TextButton(
+            onPressed: _onDisconnect,
+            child: const Text('Desconectar'),
+          ),
+        ],
+      );
+    }
+
+    if (waState == 'connecting' || _waConnecting) {
+      return const Row(
+        children: [
+          Text('WhatsApp: ', style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(width: 8),
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text('Conectando...', style: TextStyle(color: Colors.orange)),
+        ],
+      );
+    }
+
+    // not_configured, close, unknown, error
+    return Row(
+      children: [
+        const Text('WhatsApp: ', style: TextStyle(fontWeight: FontWeight.bold)),
+        if (waState != 'not_configured') ...[
+          const Icon(Icons.circle, size: 12, color: Colors.red),
+          const SizedBox(width: 6),
+          Text(waState, style: const TextStyle(color: Colors.red)),
+          const SizedBox(width: 12),
+        ],
+        ElevatedButton.icon(
+          onPressed: _waConnecting ? null : _onConnectWhatsApp,
+          icon: const Icon(Icons.phone_android, size: 16),
+          label: const Text('Conectar WhatsApp'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
 }
+
+// ── QR Code Dialog ────────────────────────────────────────────────────────────
+
+class _QrCodeDialog extends StatefulWidget {
+  final VoidCallback onConnected;
+  const _QrCodeDialog({required this.onConnected});
+
+  @override
+  State<_QrCodeDialog> createState() => _QrCodeDialogState();
+}
+
+class _QrCodeDialogState extends State<_QrCodeDialog> {
+  Timer? _timer;
+  Uint8List? _qrBytes;
+  String _status = 'Gerando QR code...';
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll(); // fetch immediately, then every 3s
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _poll() async {
+    try {
+      final data = await ApiService.getWhatsAppQrCode();
+      if (!mounted) return;
+
+      final state = data['state'] as String? ?? 'unknown';
+
+      if (state == 'open') {
+        _timer?.cancel();
+        widget.onConnected();
+        return;
+      }
+
+      // Evolution API returns QR as base64 string (may include data URI prefix)
+      final raw = data['base64'] as String? ?? data['qrcode'] as String? ?? '';
+      Uint8List? bytes;
+      if (raw.isNotEmpty) {
+        final stripped = raw.contains(',') ? raw.split(',').last : raw;
+        bytes = base64Decode(stripped);
+      }
+
+      setState(() {
+        _qrBytes = bytes;
+        _status = 'Escaneie o QR code com seu WhatsApp';
+        _error = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = 'Erro ao obter QR code: $e';
+        _error = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Conectar WhatsApp'),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _status,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _error ? Colors.red : null),
+            ),
+            const SizedBox(height: 16),
+            if (_qrBytes != null)
+              Image.memory(_qrBytes!, width: 240, height: 240)
+            else if (!_error)
+              const SizedBox(
+                width: 240,
+                height: 240,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            const SizedBox(height: 12),
+            const Text(
+              'Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Stat card helpers ─────────────────────────────────────────────────────────
 
 class _StatData {
   final String label;

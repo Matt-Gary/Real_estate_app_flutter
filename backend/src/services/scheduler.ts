@@ -10,7 +10,11 @@ async function fetchDueColdClients() {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('cold_clients')
-    .select('*, clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link)))')
+    .select(`
+      *,
+      clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link))),
+      agents(whatsapp_instance_name)
+    `)
     .eq('is_active', true)
     .lte('next_send_at', now);
 
@@ -28,6 +32,14 @@ async function sendColdBatch(rows: any[]) {
   for (const row of rows) {
     try {
       const client = row.clients ?? {};
+
+      // Each cold client belongs to an agent — use that agent's WhatsApp instance
+      const instanceName: string | null = row.agents?.whatsapp_instance_name ?? null;
+      if (!instanceName) {
+        console.warn(`[ColdScheduler] cold_client ${row.id} — agent has no WhatsApp instance, skipping.`);
+        await supabase.from('cold_clients').update({ is_active: false }).eq('id', row.id);
+        continue;
+      }
 
       // Resolve template body
       let body = '';
@@ -51,7 +63,7 @@ async function sendColdBatch(rows: any[]) {
         .sort((a: any, b: any) => a.position - b.position)
         .map((cpl: any) => cpl.property_links?.link ?? '');
       const formatted = formatMessage(body, client, rawLinks);
-      const { success, error } = await sendTextMessage(client.phone_number ?? '', formatted);
+      const { success, error } = await sendTextMessage(client.phone_number ?? '', formatted, instanceName);
 
       if (success) {
         const newSent = (row.messages_sent ?? 0) + 1;
@@ -81,13 +93,20 @@ async function sendColdBatch(rows: any[]) {
   }
 }
 
-// ── Core logic (unchanged) ────────────────────────────────────────────────────
+// ── Core logic ────────────────────────────────────────────────────────────────
 
 async function fetchPendingDueMessages() {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('follow_up_messages')
-    .select('*, clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link)))')
+    .select(`
+      *,
+      clients!inner(
+        name, phone_number, is_active, email,
+        client_property_links(position, property_links(link)),
+        agents(whatsapp_instance_name)
+      )
+    `)
     .eq('status', 'pending')
     .lte('send_at', now)
     .order('send_at');
@@ -105,7 +124,14 @@ async function fetchPendingDueMessages() {
 async function fetchNextPendingPerClient() {
   const { data, error } = await supabase
     .from('follow_up_messages')
-    .select('*, clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link)))')
+    .select(`
+      *,
+      clients!inner(
+        name, phone_number, is_active, email,
+        client_property_links(position, property_links(link)),
+        agents(whatsapp_instance_name)
+      )
+    `)
     .eq('status', 'pending')
     .order('client_id')
     .order('seq');
@@ -128,13 +154,26 @@ async function sendBatch(messages: any[]) {
   for (const msg of messages) {
     try {
       const client = msg.clients ?? {};
+
+      // Resolve the agent's WhatsApp instance through the client → agents join
+      const instanceName: string | null = client.agents?.whatsapp_instance_name ?? null;
+
+      if (!instanceName) {
+        console.warn(`[Scheduler] Message ${msg.id} — agent has no WhatsApp instance, marking failed.`);
+        await supabase
+          .from('follow_up_messages')
+          .update({ status: 'failed', error_detail: 'Agent has no WhatsApp instance configured' })
+          .eq('id', msg.id);
+        continue;
+      }
+
       const rawLinks = (client.client_property_links ?? [])
         .sort((a: any, b: any) => a.position - b.position)
         .map((cpl: any) => cpl.property_links?.link ?? '');
-      const body   = formatMessage(msg.body, client, rawLinks);
-      const phone  = client.phone_number ?? '';
+      const body  = formatMessage(msg.body, client, rawLinks);
+      const phone = client.phone_number ?? '';
 
-      const { success, statusCode, error } = await sendTextMessage(phone, body);
+      const { success, statusCode, error } = await sendTextMessage(phone, body, instanceName);
 
       if (success) {
         const { error: updateErr } = await supabase

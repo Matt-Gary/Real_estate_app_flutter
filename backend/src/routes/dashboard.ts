@@ -37,7 +37,17 @@ router.get('/stats', async (req: Request, res: Response) => {
     }
   }
 
-  const waStatus = await checkInstanceStatus();
+  // Fetch the agent's own WhatsApp instance — each agent has their own number
+  const { data: agentRow } = await supabase
+    .from('agents')
+    .select('whatsapp_instance_name')
+    .eq('id', agentId)
+    .single();
+
+  const instanceName = agentRow?.whatsapp_instance_name ?? null;
+  const waStatus = instanceName
+    ? await checkInstanceStatus(instanceName)
+    : { state: 'not_configured' };
 
   res.json({ total, active, replied, sent, pending, failed, cancelled, waStatus });
 });

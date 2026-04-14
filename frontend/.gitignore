@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 
 ./claude/settings.json
+
+DEPLOY.docx
+~$DEPLOY.docx

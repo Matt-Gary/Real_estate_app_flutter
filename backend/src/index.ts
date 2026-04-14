@@ -22,6 +22,7 @@ import templateRoutes     from './routes/templates';
 import dashboardRoutes    from './routes/dashboard';
 import coldClientRoutes   from './routes/cold_clients';
 import propertyLinkRoutes from './routes/property_links';
+import whatsappRoutes     from './routes/whatsapp';
 
 const app  = express();
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -42,6 +43,7 @@ app.use('/api/templates',       templateRoutes);
 app.use('/api/dashboard',       dashboardRoutes);
 app.use('/api/cold-clients',    coldClientRoutes);
 app.use('/api/property-links',  propertyLinkRoutes);
+app.use('/api/whatsapp',        whatsappRoutes);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 

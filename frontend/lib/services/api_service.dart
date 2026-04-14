@@ -365,4 +365,45 @@ class ApiService {
     _handleResponse(res, 'Send now failed');
     return _decode(res);
   }
+
+  // ── WhatsApp ───────────────────────────────────────────────────────────────
+
+  /// Creates (or reconnects) the agent's Evolution API instance.
+  static Future<Map<String, dynamic>> whatsappConnect() async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/whatsapp/connect'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao conectar WhatsApp');
+    return _decode(res);
+  }
+
+  /// Returns the current WhatsApp connection state for the agent's instance.
+  static Future<Map<String, dynamic>> getWhatsAppStatus() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/whatsapp/status'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao obter status do WhatsApp');
+    return _decode(res);
+  }
+
+  /// Returns QR code data for the agent to scan. Poll every 3s until state == 'open'.
+  static Future<Map<String, dynamic>> getWhatsAppQrCode() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/whatsapp/qrcode'),
+      headers: await _authHeaders(),
+    ).timeout(const Duration(seconds: 15));
+    _handleResponse(res, 'Falha ao obter QR code');
+    return _decode(res);
+  }
+
+  /// Logs out the WhatsApp session (disconnects the phone, keeps the instance slot).
+  static Future<void> whatsappDisconnect() async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/whatsapp/disconnect'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao desconectar WhatsApp');
+  }
 }
