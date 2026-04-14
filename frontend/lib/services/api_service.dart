@@ -9,8 +9,8 @@ class UnauthorizedException implements Exception {
 
 class ApiService {
   // Change this to your VM IP / domain in production
-  static const String baseUrl = 'http://localhost:3000/api';
-  //static const String baseUrl = 'http://72.60.137.97:3001/api';
+  //static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'http://72.60.137.97:3001/api';
 
   static const _timeout = Duration(seconds: 30);
 
