@@ -24,8 +24,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
 
   List<dynamic> _templates = [];
   List<String?> _selectedTemplateIds = List.generate(5, (_) => null);
-  final List<GlobalKey<FormFieldState<String?>>> _dropdownKeys =
-      List.generate(5, (_) => GlobalKey<FormFieldState<String?>>());
+  final List<GlobalKey<FormFieldState<String?>>> _dropdownKeys = List.generate(
+    5,
+    (_) => GlobalKey<FormFieldState<String?>>(),
+  );
 
   List<dynamic> _propertyLinks = [];
   // Positions 1-5; index 0 = position 1
@@ -54,7 +56,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       _notesCtrl.text = c['notes'] ?? '';
       // Pre-fill assigned property links sorted by position
       final links = (c['client_property_links'] as List<dynamic>? ?? [])
-        ..sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
+        ..sort(
+          (a, b) => (a['position'] as int).compareTo(b['position'] as int),
+        );
       for (final link in links) {
         final pos = (link['position'] as int) - 1; // convert to 0-based index
         if (pos >= 0 && pos < 5) {
@@ -139,7 +143,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
         builder: (ctx) => AlertDialog(
           icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
           title: const Text('Horário inválido'),
-          content: const Text('O horário selecionado já passou. Escolha um horário futuro.'),
+          content: const Text(
+            'O horário selecionado já passou. Escolha um horário futuro.',
+          ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(ctx),
@@ -219,40 +225,6 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   Future<void> _save() async {
     if (_loading) return;
     if (!_formKey.currentState!.validate()) {
-      final phone = _phoneCtrl.text.trim();
-      if (phone.isNotEmpty && !phone.startsWith('+55')) {
-        final suggestion = phone.startsWith('+')
-            ? '+55${phone.substring(1)}'
-            : '+55$phone';
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            icon: const Icon(
-              Icons.warning_amber_rounded,
-              color: Colors.orange,
-              size: 48,
-            ),
-            title: const Text('Número inválido'),
-            content: Text(
-              'O número "$phone" não tem o código do Brasil (+55).\n\n'
-              'Você quis dizer:\n$suggestion',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  _phoneCtrl.text = suggestion;
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Sim, corrigir automaticamente'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Editar manualmente'),
-              ),
-            ],
-          ),
-        );
-      }
       return;
     }
     // Validate message order before saving
@@ -262,7 +234,8 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       if (_sendAt[i] != null) {
         if (lastDate != null && !_sendAt[i]!.isAfter(lastDate)) {
           setState(() {
-            _error = 'Mensagem ${i + 1} deve ser agendada depois da mensagem ${lastIndex + 1}.';
+            _error =
+                'Mensagem ${i + 1} deve ser agendada depois da mensagem ${lastIndex + 1}.';
           });
           return;
         }
@@ -309,7 +282,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       for (int i = 0; i < 5; i++) {
         if (_sendAt[i] != null) {
           if (_bodyCtrl[i].text.trim().isEmpty) {
-            setState(() => _error = 'Mensagem ${i + 1} está agendada mas sem conteúdo.');
+            setState(
+              () =>
+                  _error = 'Mensagem ${i + 1} está agendada mas sem conteúdo.',
+            );
             return;
           }
           messages.add({
@@ -330,39 +306,21 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     }
   }
 
-  String? _validateBrazilianPhone(String? value) {
+  String? _validatePhone(String? value) {
     if (value == null || value.trim().isEmpty) return 'Obrigatório';
 
     final phone = value.trim();
 
-    // Must start with +
     if (!phone.startsWith('+')) {
-      return 'O número deve começar com + (ex: +5585999713444)';
+      return 'O número deve começar com + e o código do país (ex: +44, +55, +1)';
     }
 
-    // Must start with +55 (Brazil country code)
-    if (!phone.startsWith('+55')) {
-      return 'Número inválido. Use o código do Brasil: +55\n'
-          'Exemplo: ${_suggestBrazilianNumber(phone)}';
+    // E.164: + followed by 7–15 digits
+    if (!RegExp(r'^\+\d{7,15}$').hasMatch(phone)) {
+      return 'Formato inválido. Use + código do país + número (ex: +447911123456)';
     }
 
-    // After +55, must have DDD (2 digits) + number (8 or 9 digits) = 10 or 11 digits
-    final afterCountry = phone.substring(3); // remove +55
-    if (!RegExp(r'^\d{10,11}$').hasMatch(afterCountry)) {
-      return 'Formato inválido. Exemplo: +5585999713444\n'
-          '(+55 + DDD de 2 dígitos + número)';
-    }
-
-    return null; // valid
-  }
-
-  String _suggestBrazilianNumber(String phone) {
-    // Try to suggest the correct number by prepending +55
-    // e.g. user typed +85999713444 → suggest +5585999713444
-    if (phone.startsWith('+')) {
-      return '+55${phone.substring(1)}';
-    }
-    return '+55$phone';
+    return null;
   }
 
   @override
@@ -401,11 +359,11 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                         controller: _phoneCtrl,
                         decoration: const InputDecoration(
                           labelText: 'WhatsApp phone *',
-                          hintText: '+5511999999999',
+                          hintText: '+55999785487',
                           border: OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.phone,
-                        validator: _validateBrazilianPhone,
+                        validator: _validatePhone,
                       ),
                     ),
                     _field(_emailCtrl, 'Email', hint: 'client@email.com'),
@@ -497,10 +455,12 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               value: null,
               child: Text('— nenhum —'),
             ),
-            ..._propertyLinks.map((pl) => DropdownMenuItem<String?>(
-                  value: pl['id'] as String,
-                  child: Text(pl['description'] as String),
-                )),
+            ..._propertyLinks.map(
+              (pl) => DropdownMenuItem<String?>(
+                value: pl['id'] as String,
+                child: Text(pl['description'] as String),
+              ),
+            ),
           ],
           onChanged: (id) => setState(() {
             _selectedLinkIds[i] = id;
@@ -534,17 +494,22 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                   labelText: 'Usar template',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.article_outlined, size: 18),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 items: [
                   const DropdownMenuItem<String>(
                     value: null,
                     child: Text('— nenhum —'),
                   ),
-                  ..._templates.map((t) => DropdownMenuItem<String>(
-                        value: t['id'] as String,
-                        child: Text(t['name'] as String),
-                      )),
+                  ..._templates.map(
+                    (t) => DropdownMenuItem<String>(
+                      value: t['id'] as String,
+                      child: Text(t['name'] as String),
+                    ),
+                  ),
                   const DropdownMenuItem<String>(
                     value: '__ADD_TEMPLATE__',
                     child: Row(
@@ -564,7 +529,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                     _dropdownKeys[index].currentState?.reset();
                     await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const TemplatesScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const TemplatesScreen(),
+                      ),
                     );
                     if (!mounted) return;
                     final fresh = await ApiService.getTemplates();
@@ -575,10 +542,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                   setState(() {
                     _selectedTemplateIds[index] = id;
                     if (id != null) {
-                      final template = _templates.cast<Map<String, dynamic>>().firstWhere(
-                        (t) => t['id'] == id,
-                        orElse: () => {},
-                      );
+                      final template = _templates
+                          .cast<Map<String, dynamic>>()
+                          .firstWhere((t) => t['id'] == id, orElse: () => {});
                       if (template.isNotEmpty) {
                         _bodyCtrl[index].text = template['body'] ?? '';
                       }
@@ -607,16 +573,22 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                 Icon(
                   Icons.schedule,
                   size: 16,
-                  color: _sendAt[index] != null ? Colors.grey : Colors.grey.shade400,
+                  color: _sendAt[index] != null
+                      ? Colors.grey
+                      : Colors.grey.shade400,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _sendAt[index] != null ? fmt.format(_sendAt[index]!) : 'Não agendado',
+                    _sendAt[index] != null
+                        ? fmt.format(_sendAt[index]!)
+                        : 'Não agendado',
                     style: TextStyle(
                       fontSize: 13,
                       color: _sendAt[index] != null ? null : Colors.grey,
-                      fontStyle: _sendAt[index] != null ? FontStyle.normal : FontStyle.italic,
+                      fontStyle: _sendAt[index] != null
+                          ? FontStyle.normal
+                          : FontStyle.italic,
                     ),
                   ),
                 ),
