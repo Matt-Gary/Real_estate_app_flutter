@@ -136,6 +136,35 @@ export async function deleteInstance(instanceName: string): Promise<void> {
   }
 }
 
+// Point an instance at our webhook endpoint so we receive incoming-message and
+// connection-state events. Safe to call repeatedly (Evolution replaces the URL).
+export async function configureWebhook(instanceName: string): Promise<void> {
+  const publicUrl = process.env.PUBLIC_WEBHOOK_URL;
+  if (!publicUrl) {
+    console.warn('[Evolution] PUBLIC_WEBHOOK_URL not set — skipping webhook configuration.');
+    return;
+  }
+  const secret = process.env.EVOLUTION_WEBHOOK_SECRET;
+  try {
+    const url = `${BASE_URL}/webhook/set/${instanceName}`;
+    await axios.post(
+      url,
+      {
+        url: publicUrl,
+        enabled: true,
+        webhook_by_events: false,
+        events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+        headers: secret ? { 'x-webhook-secret': secret } : undefined,
+      },
+      { headers, timeout: 10000 },
+    );
+    console.log(`[Evolution] Webhook configured for instance ${instanceName} → ${publicUrl}`);
+  } catch (err: any) {
+    const status = err.response?.status ?? null;
+    console.warn(`[Evolution] configureWebhook(${instanceName}) failed (${status}): ${err.message}`);
+  }
+}
+
 // Format a message template with client data and property links.
 // links[0] = position-1 link, links[1] = position-2, etc.
 export function formatMessage(body: string, client: Record<string, any>, links: string[] = []): string {

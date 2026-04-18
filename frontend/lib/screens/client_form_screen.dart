@@ -138,88 +138,76 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     // Validate that selected time is not in the past
     if (picked.isBefore(DateTime.now())) {
       if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
-          title: const Text('Horário inválido'),
-          content: const Text(
-            'O horário selecionado já passou. Escolha um horário futuro.',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
+      await _showScheduleError(
+        'Horário inválido',
+        'O horário selecionado já passou. Escolha um horário futuro.',
       );
       return;
     }
 
-    // Validate against previous non-null message
-    int prevIndex = -1;
-    for (int i = index - 1; i >= 0; i--) {
-      if (_sendAt[i] != null) {
-        prevIndex = i;
-        break;
-      }
-    }
-    if (prevIndex != -1 && !picked.isAfter(_sendAt[prevIndex]!)) {
+    // Anti-ban: enforce 08:00–20:00 send window (Meta/WhatsApp policy).
+    // Backend re-validates in APP_TZ; frontend uses browser-local as a preview.
+    if (picked.hour < 8 || picked.hour >= 20) {
       if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
-          title: const Text('Horário inválido'),
-          content: Text(
-            'A mensagem ${index + 1} deve ser enviada depois da mensagem ${prevIndex + 1}.\n\n'
-            'Mensagem ${prevIndex + 1} está agendada para:\n'
-            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[prevIndex]!)}',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
+      await _showScheduleError(
+        'Fora do horário permitido',
+        'Por política do WhatsApp/Meta, mensagens só podem ser agendadas '
+            'entre 08:00 e 20:00.',
       );
       return;
     }
 
-    // Validate against next non-null message
-    int nextIndex = -1;
-    for (int i = index + 1; i < 5; i++) {
-      if (_sendAt[i] != null) {
-        nextIndex = i;
-        break;
+    // Anti-ban: enforce 48-hour minimum gap between messages to the same client.
+    const minGap = Duration(hours: 48);
+    for (int i = 0; i < 5; i++) {
+      if (i == index || _sendAt[i] == null) continue;
+      final diff = picked.difference(_sendAt[i]!).abs();
+      if (diff < minGap) {
+        if (!mounted) return;
+        await _showScheduleError(
+          'Intervalo muito curto',
+          'Mensagens ao mesmo cliente precisam ter pelo menos 48 horas de '
+              'intervalo.\n\n'
+              'Mensagem ${i + 1} está agendada para:\n'
+              '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[i]!)}',
+        );
+        return;
       }
-    }
-    if (nextIndex != -1 && !picked.isBefore(_sendAt[nextIndex]!)) {
-      if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
-          title: const Text('Horário inválido'),
-          content: Text(
-            'A mensagem ${index + 1} deve ser enviada antes da mensagem ${nextIndex + 1}.\n\n'
-            'Mensagem ${nextIndex + 1} está agendada para:\n'
-            '${DateFormat('dd/MM/yyyy HH:mm').format(_sendAt[nextIndex]!)}',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
     }
 
     setState(() => _sendAt[index] = picked);
+  }
+
+  Future<void> _showScheduleError(String title, String body) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.schedule, color: Colors.orange, size: 40),
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Translate backend 422 validation error codes to Portuguese UI text.
+  String _translateBackendError(String raw) {
+    if (raw.contains('OUTSIDE_SEND_WINDOW')) {
+      return 'Uma das mensagens está fora do horário permitido (08:00–20:00).';
+    }
+    if (raw.contains('MIN_GAP_VIOLATION')) {
+      return 'Mensagens ao mesmo cliente precisam ter pelo menos 48 horas de intervalo.';
+    }
+    if (raw.contains('DAILY_LIMIT_EXCEEDED')) {
+      return 'Limite diário de 100 mensagens por agente seria excedido. '
+          'Redistribua mensagens para outros dias.';
+    }
+    return raw;
   }
 
   Future<void> _save() async {
@@ -227,20 +215,25 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    // Validate message order before saving
-    DateTime? lastDate;
-    int lastIndex = -1;
+    // Anti-ban safety net: enforce window + 48h gap again before submitting
+    // (picker already enforces these per-message, but a re-check catches any
+    // state mutations that bypassed the picker).
+    const minGap = Duration(hours: 48);
     for (int i = 0; i < 5; i++) {
-      if (_sendAt[i] != null) {
-        if (lastDate != null && !_sendAt[i]!.isAfter(lastDate)) {
-          setState(() {
-            _error =
-                'Mensagem ${i + 1} deve ser agendada depois da mensagem ${lastIndex + 1}.';
-          });
+      if (_sendAt[i] == null) continue;
+      final t = _sendAt[i]!;
+      if (t.hour < 8 || t.hour >= 20) {
+        setState(() => _error =
+            'Mensagem ${i + 1} está fora do horário permitido (08:00–20:00).');
+        return;
+      }
+      for (int j = i + 1; j < 5; j++) {
+        if (_sendAt[j] == null) continue;
+        if (_sendAt[j]!.difference(t).abs() < minGap) {
+          setState(() => _error =
+              'Mensagens ${i + 1} e ${j + 1} precisam ter pelo menos 48 horas de intervalo.');
           return;
         }
-        lastDate = _sendAt[i];
-        lastIndex = i;
       }
     }
     setState(() {
@@ -300,7 +293,8 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      final raw = e.toString().replaceFirst('Exception: ', '');
+      setState(() => _error = _translateBackendError(raw));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

@@ -1,8 +1,40 @@
 import { supabase } from './supabase';
 import { sendTextMessage, formatMessage } from './evolution';
+import { applyJitter, sleep } from './rateLimits';
+import { recordSent } from './counters';
 
 let _timer: NodeJS.Timeout | null = null;
 let _running = false;
+
+// Consecutive-failure streak per agent. 3 in a row → pause queue + alert.
+const _failStreak = new Map<string, number>();
+const FAIL_STREAK_THRESHOLD = 3;
+
+async function pauseAgentQueue(agentId: string, reason: string, severity: 'warning' | 'critical' = 'critical') {
+  try {
+    await supabase
+      .from('agents')
+      .update({ queue_paused_at: new Date().toISOString(), queue_paused_reason: reason })
+      .eq('id', agentId)
+      .is('queue_paused_at', null);    // only pause if not already paused
+
+    await supabase.from('agent_alerts').insert({
+      agent_id: agentId,
+      kind: 'pending_stuck',
+      severity,
+      message: `Fila pausada automaticamente: ${reason}`,
+    });
+    console.warn(`[Scheduler] Paused agent ${agentId}: ${reason}`);
+  } catch (err) {
+    console.error('[Scheduler] pauseAgentQueue failed:', err);
+  }
+}
+
+function isTransientFailure(statusCode: number | null): boolean {
+  if (statusCode === null) return true;          // network / timeout
+  if (statusCode >= 500 && statusCode < 600) return true;
+  return false;
+}
 
 // ── Cold clients ──────────────────────────────────────────────────────────────
 
@@ -13,7 +45,7 @@ async function fetchDueColdClients() {
     .select(`
       *,
       clients!inner(name, phone_number, is_active, email, client_property_links(position, property_links(link))),
-      agents(whatsapp_instance_name)
+      agents(id, whatsapp_instance_name, queue_paused_at)
     `)
     .eq('is_active', true)
     .lte('next_send_at', now);
@@ -22,6 +54,7 @@ async function fetchDueColdClients() {
   const seenCold = new Set<string>();
   return (data ?? []).filter((row: any) => {
     if (!row.clients?.is_active) return false;
+    if (row.agents?.queue_paused_at) return false;   // skip paused agents
     if (seenCold.has(row.id)) return false;
     seenCold.add(row.id);
     return true;
@@ -32,11 +65,10 @@ async function sendColdBatch(rows: any[]) {
   for (const row of rows) {
     try {
       const client = row.clients ?? {};
-
-      // Each cold client belongs to an agent — use that agent's WhatsApp instance
+      const agentId: string | null = row.agents?.id ?? null;
       const instanceName: string | null = row.agents?.whatsapp_instance_name ?? null;
-      if (!instanceName) {
-        console.warn(`[ColdScheduler] cold_client ${row.id} — agent has no WhatsApp instance, skipping.`);
+      if (!instanceName || !agentId) {
+        console.warn(`[ColdScheduler] cold_client ${row.id} — agent missing, skipping.`);
         await supabase.from('cold_clients').update({ is_active: false }).eq('id', row.id);
         continue;
       }
@@ -53,7 +85,6 @@ async function sendColdBatch(rows: any[]) {
       }
 
       if (!body) {
-        // Template was deleted or never set — deactivate so we don't loop forever
         console.warn(`[ColdScheduler] cold_client ${row.id} has no template body — deactivating.`);
         await supabase.from('cold_clients').update({ is_active: false }).eq('id', row.id);
         continue;
@@ -63,9 +94,15 @@ async function sendColdBatch(rows: any[]) {
         .sort((a: any, b: any) => a.position - b.position)
         .map((cpl: any) => cpl.property_links?.link ?? '');
       const formatted = formatMessage(body, client, rawLinks);
-      const { success, error } = await sendTextMessage(client.phone_number ?? '', formatted, instanceName);
+
+      // Randomized jitter before each send — never exactly on the scheduled minute
+      await sleep(applyJitter());
+
+      const { success, statusCode, error } = await sendTextMessage(client.phone_number ?? '', formatted, instanceName);
 
       if (success) {
+        _failStreak.set(agentId, 0);
+        const sentAtIso = new Date().toISOString();
         const newSent = (row.messages_sent ?? 0) + 1;
         const hitLimit = row.max_messages != null && newSent >= row.max_messages;
         const nextSendAt = new Date(Date.now() + row.interval_days * 86_400_000).toISOString();
@@ -79,13 +116,20 @@ async function sendColdBatch(rows: any[]) {
           })
           .eq('id', row.id);
 
-        if (updateErr) {
-          console.error(`[ColdScheduler] Failed to update cold_client ${row.id} after send:`, updateErr);
-        } else if (hitLimit) {
-          console.log(`[ColdScheduler] cold_client ${row.id} reached max_messages (${row.max_messages}) — deactivated.`);
-        }
+        if (updateErr) console.error(`[ColdScheduler] Failed to update cold_client ${row.id}:`, updateErr);
+        else if (hitLimit) console.log(`[ColdScheduler] cold_client ${row.id} reached max_messages.`);
+
+        await recordSent(agentId, sentAtIso);
       } else {
         console.error(`[ColdScheduler] Failed to send cold message for ${row.id}: ${error}`);
+        if (isTransientFailure(statusCode)) {
+          const n = (_failStreak.get(agentId) ?? 0) + 1;
+          _failStreak.set(agentId, n);
+          if (n >= FAIL_STREAK_THRESHOLD) {
+            await pauseAgentQueue(agentId, `${n} consecutive send failures`);
+            _failStreak.set(agentId, 0);
+          }
+        }
       }
     } catch (err) {
       console.error(`[ColdScheduler] Unexpected error processing cold_client ${row.id}:`, err);
@@ -104,7 +148,7 @@ async function fetchPendingDueMessages() {
       clients!inner(
         name, phone_number, is_active, email,
         client_property_links(position, property_links(link)),
-        agents(whatsapp_instance_name)
+        agents(id, whatsapp_instance_name, queue_paused_at)
       )
     `)
     .eq('status', 'pending')
@@ -115,6 +159,7 @@ async function fetchPendingDueMessages() {
   const seen = new Set<string>();
   return (data ?? []).filter((m: any) => {
     if (!m.clients?.is_active) return false;
+    if (m.clients?.agents?.queue_paused_at) return false;  // skip paused agents
     if (seen.has(m.id)) return false;
     seen.add(m.id);
     return true;
@@ -129,7 +174,7 @@ async function fetchNextPendingPerClient() {
       clients!inner(
         name, phone_number, is_active, email,
         client_property_links(position, property_links(link)),
-        agents(whatsapp_instance_name)
+        agents(id, whatsapp_instance_name, queue_paused_at)
       )
     `)
     .eq('status', 'pending')
@@ -142,6 +187,7 @@ async function fetchNextPendingPerClient() {
   const result: any[] = [];
   for (const m of (data ?? [])) {
     if (!m.clients?.is_active) continue;
+    if (m.clients?.agents?.queue_paused_at) continue;
     if (!seen.has(m.client_id)) {
       seen.add(m.client_id);
       result.push(m);
@@ -154,12 +200,11 @@ async function sendBatch(messages: any[]) {
   for (const msg of messages) {
     try {
       const client = msg.clients ?? {};
-
-      // Resolve the agent's WhatsApp instance through the client → agents join
+      const agentId: string | null = client.agents?.id ?? null;
       const instanceName: string | null = client.agents?.whatsapp_instance_name ?? null;
 
-      if (!instanceName) {
-        console.warn(`[Scheduler] Message ${msg.id} — agent has no WhatsApp instance, marking failed.`);
+      if (!instanceName || !agentId) {
+        console.warn(`[Scheduler] Message ${msg.id} — agent missing, marking failed.`);
         await supabase
           .from('follow_up_messages')
           .update({ status: 'failed', error_detail: 'Agent has no WhatsApp instance configured' })
@@ -173,20 +218,36 @@ async function sendBatch(messages: any[]) {
       const body  = formatMessage(msg.body, client, rawLinks);
       const phone = client.phone_number ?? '';
 
+      // Randomized jitter — spreads bursts across 5–30s so we never fire the
+      // whole batch at the exact cron tick.
+      await sleep(applyJitter());
+
       const { success, statusCode, error } = await sendTextMessage(phone, body, instanceName);
 
       if (success) {
+        _failStreak.set(agentId, 0);
+        const sentAtIso = new Date().toISOString();
         const { error: updateErr } = await supabase
           .from('follow_up_messages')
-          .update({ status: 'sent', sent_at: new Date().toISOString() })
+          .update({ status: 'sent', sent_at: sentAtIso })
           .eq('id', msg.id);
         if (updateErr) console.error(`[Scheduler] Failed to mark message ${msg.id} as sent:`, updateErr);
+        await recordSent(agentId, sentAtIso);
       } else {
         const { error: updateErr } = await supabase
           .from('follow_up_messages')
           .update({ status: 'failed', error_detail: error ?? 'Unknown error' })
           .eq('id', msg.id);
         if (updateErr) console.error(`[Scheduler] Failed to mark message ${msg.id} as failed:`, updateErr);
+
+        if (isTransientFailure(statusCode)) {
+          const n = (_failStreak.get(agentId) ?? 0) + 1;
+          _failStreak.set(agentId, n);
+          if (n >= FAIL_STREAK_THRESHOLD) {
+            await pauseAgentQueue(agentId, `${n} consecutive send failures`);
+            _failStreak.set(agentId, 0);
+          }
+        }
       }
 
       const { error: logErr } = await supabase.from('send_log').insert({
@@ -207,28 +268,30 @@ async function sendBatch(messages: any[]) {
 async function fetchNextSendAt(): Promise<Date | null> {
   const now = new Date().toISOString();
 
-  // Next regular follow-up message
+  // Next regular follow-up message (ignore paused agents)
   const { data: fupData } = await supabase
     .from('follow_up_messages')
-    .select('send_at, clients!inner(is_active)')
+    .select('send_at, clients!inner(is_active, agents(queue_paused_at))')
     .eq('status', 'pending')
     .gt('send_at', now)
     .order('send_at')
     .limit(10);
 
-  const nextFup = (fupData ?? []).find((m: any) => m.clients?.is_active === true);
+  const nextFup = (fupData ?? []).find(
+    (m: any) => m.clients?.is_active === true && !m.clients?.agents?.queue_paused_at,
+  );
 
   // Next cold client send
   const { data: coldData } = await supabase
     .from('cold_clients')
-    .select('next_send_at')
+    .select('next_send_at, agents(queue_paused_at)')
     .eq('is_active', true)
     .not('next_send_at', 'is', null)
     .gt('next_send_at', now)
     .order('next_send_at')
-    .limit(1);
+    .limit(10);
 
-  const nextCold = coldData?.[0] ?? null;
+  const nextCold = (coldData ?? []).find((c: any) => !c.agents?.queue_paused_at) ?? null;
 
   const candidates: Date[] = [];
   if (nextFup)  candidates.push(new Date(nextFup.send_at));
