@@ -6,14 +6,25 @@ import 'api_service.dart';
 class AuthProvider extends ChangeNotifier {
   Map<String, dynamic>? _agent;
   bool _loading = true;
+  bool _sessionExpired = false;
 
   Map<String, dynamic>? get agent => _agent;
   bool get isLoggedIn => _agent != null;
   bool get loading => _loading;
+  bool get sessionExpired => _sessionExpired;
 
   AuthProvider() {
-    ApiService.onUnauthorized = () => logout();
+    ApiService.onUnauthorized = _handleUnauthorized;
     _restoreSession();
+  }
+
+  void _handleUnauthorized() {
+    _sessionExpired = true;
+    logout();
+  }
+
+  void consumeSessionExpired() {
+    _sessionExpired = false;
   }
 
   Future<void> _restoreSession() async {

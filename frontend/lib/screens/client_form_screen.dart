@@ -83,7 +83,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           final seq = (m['seq'] as int) - 1;
           if (seq < 0 || seq > 4) continue;
           _bodyCtrl[seq].text = m['body'] ?? '';
-          _sendAt[seq] = DateTime.parse(m['send_at']).toLocal();
+          final rawSendAt = m['send_at'] as String?;
+          final parsed = rawSendAt == null ? null : DateTime.tryParse(rawSendAt);
+          _sendAt[seq] = (parsed ?? DateTime.now()).toLocal();
         }
       } else {
         // Pre-fill slots with templates in order

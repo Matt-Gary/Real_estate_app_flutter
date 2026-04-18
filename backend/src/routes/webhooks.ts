@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { timingSafeEqual } from 'crypto';
 import { supabase } from '../services/supabase';
 
 const router = Router();
@@ -63,7 +64,10 @@ function verifySecret(req: Request): boolean {
     return false;
   }
   const got = req.header('x-webhook-secret') ?? req.header('apikey') ?? '';
-  return got === expected;
+  const a = Buffer.from(got);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 async function handleIncomingMessage(data: any) {
