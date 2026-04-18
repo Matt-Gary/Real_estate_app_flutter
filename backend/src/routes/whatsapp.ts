@@ -7,6 +7,7 @@ import {
   getQrCode,
   logoutInstance,
   deleteInstance,
+  configureWebhook,
 } from '../services/evolution';
 
 const router = Router();
@@ -43,10 +44,17 @@ router.post('/connect', async (req: Request, res: Response) => {
     // Create the instance on Evolution API (idempotent — safe if it already exists)
     await createInstance(instanceName);
 
-    // Persist the instance name if it wasn't stored yet
+    // Point Evolution at our webhook so opt-outs + connection events reach us
+    await configureWebhook(instanceName);
+
+    // Clear any previous pause state on (re)connect
     const { error: updateErr } = await supabase
       .from('agents')
-      .update({ whatsapp_instance_name: instanceName })
+      .update({
+        whatsapp_instance_name: instanceName,
+        queue_paused_at: null,
+        queue_paused_reason: null,
+      })
       .eq('id', agentId);
 
     if (updateErr) throw new Error(`Failed to persist instance name: ${updateErr.message}`);

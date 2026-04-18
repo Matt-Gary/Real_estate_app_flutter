@@ -47,8 +47,15 @@ class ReApp extends StatelessWidget {
   }
 }
 
-class _RootRouter extends StatelessWidget {
+class _RootRouter extends StatefulWidget {
   const _RootRouter();
+
+  @override
+  State<_RootRouter> createState() => _RootRouterState();
+}
+
+class _RootRouterState extends State<_RootRouter> {
+  bool _wasLoggedIn = false;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +63,27 @@ class _RootRouter extends StatelessWidget {
     if (auth.loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return auth.isLoggedIn ? const HomeScreen() : const LoginScreen();
+    final loggedIn = auth.isLoggedIn;
+
+    if (_wasLoggedIn && !loggedIn) {
+      final expired = auth.sessionExpired;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final nav = Navigator.of(context);
+        if (nav.canPop()) nav.popUntil((r) => r.isFirst);
+        if (expired) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Sessão expirada. Faça login novamente.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+          auth.consumeSessionExpired();
+        }
+      });
+    }
+    _wasLoggedIn = loggedIn;
+
+    return loggedIn ? const HomeScreen() : const LoginScreen();
   }
 }

@@ -544,21 +544,43 @@ class _ClientRow extends StatelessWidget {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? Colors.green.withValues(alpha: 0.15)
-                    : Colors.grey.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                isActive ? 'Ativo' : 'Respondido',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isActive ? Colors.green : Colors.grey,
-                ),
-              ),
+            Builder(
+              builder: (_) {
+                final optedOut = client['opted_out_at'] != null;
+                final Color color;
+                final String label;
+                if (optedOut) {
+                  color = Colors.red;
+                  label = 'Opt-out';
+                } else if (isActive) {
+                  color = Colors.green;
+                  label = 'Ativo';
+                } else {
+                  color = Colors.grey;
+                  label = 'Respondido';
+                }
+                final chip = Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 12, color: color),
+                  ),
+                );
+                if (optedOut) {
+                  final reason = client['opt_out_reason'] as String?;
+                  return Tooltip(
+                    message: reason != null && reason.isNotEmpty
+                        ? 'Cliente pediu para parar: "$reason"'
+                        : 'Cliente pediu para parar',
+                    child: chip,
+                  );
+                }
+                return chip;
+              },
             ),
             const SizedBox(width: 8),
             if ((client['total_count'] ?? 0) > 0) ...[

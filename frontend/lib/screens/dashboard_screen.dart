@@ -174,13 +174,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _StatData('Falhas', s['failed'], Colors.red),
     ];
 
+    final queuePaused = s['queuePaused'] == true;
+    final queueReason = s['queuePausedReason'] as String?;
+    final alerts = (s['alerts'] as List?) ?? const [];
+    final quota = (s['dailyQuota'] as Map?) ?? const {};
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (queuePaused) _buildQueuePausedBanner(queueReason),
+        if (alerts.isNotEmpty) _buildAlertsBanner(alerts),
         Wrap(
           spacing: 12,
           runSpacing: 12,
-          children: statCards.map((d) => _StatCard(data: d)).toList(),
+          children: [
+            ...statCards.map((d) => _StatCard(data: d)),
+            _QuotaCard(
+              used: (quota['used'] as num?)?.toInt() ?? 0,
+              limit: (quota['limit'] as num?)?.toInt() ?? 100,
+            ),
+          ],
         ),
         const SizedBox(height: 32),
         _buildWhatsAppSection(waState),
@@ -190,6 +203,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(color: Colors.grey),
         ),
       ],
+    );
+  }
+
+  Widget _buildQueuePausedBanner(String? reason) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        border: Border.all(color: Colors.red.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.pause_circle_filled, color: Colors.red),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Fila pausada automaticamente',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                ),
+                if (reason != null && reason.isNotEmpty)
+                  Text(
+                    'Motivo: $reason. Resolva o problema (ex: reconectar WhatsApp) e retome.',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await ApiService.resumeQueue();
+                if (mounted) await _load();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: $e')),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Retomar fila'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertsBanner(List alerts) {
+    return Column(
+      children: [
+        for (final a in alerts) _buildSingleAlert(a as Map),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildSingleAlert(Map a) {
+    final severity = a['severity'] as String? ?? 'warning';
+    final isCritical = severity == 'critical';
+    final bg = isCritical ? Colors.red.shade50 : Colors.orange.shade50;
+    final fg = isCritical ? Colors.red : Colors.orange.shade900;
+    final border = isCritical ? Colors.red.shade300 : Colors.orange.shade300;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: fg, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              a['message'] as String? ?? '',
+              style: TextStyle(color: fg),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            color: fg,
+            tooltip: 'Dispensar',
+            onPressed: () async {
+              try {
+                await ApiService.dismissAlert(a['id'] as String);
+                if (mounted) await _load();
+              } catch (_) {}
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -366,6 +484,64 @@ class _StatData {
   final dynamic value;
   final Color color;
   const _StatData(this.label, this.value, this.color);
+}
+
+class _QuotaCard extends StatelessWidget {
+  final int used;
+  final int limit;
+  const _QuotaCard({required this.used, required this.limit});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = limit == 0 ? 0.0 : (used / limit).clamp(0.0, 1.0);
+    final Color color;
+    if (pct >= 0.95) {
+      color = Colors.red;
+    } else if (pct >= 0.80) {
+      color = Colors.orange;
+    } else {
+      color = const Color(0xFF3B8BD4);
+    }
+
+    return Container(
+      width: 140,
+      height: 90,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$used / $limit',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Enviados hoje',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 4,
+              backgroundColor: Colors.grey.shade300,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatCard extends StatelessWidget {

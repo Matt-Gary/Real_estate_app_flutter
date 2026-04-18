@@ -42,6 +42,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
+    if (_loading) return;
     if (!_loginFormKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
     try {
@@ -57,6 +58,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _register() async {
+    if (_loading) return;
     if (!_registerFormKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
     try {
