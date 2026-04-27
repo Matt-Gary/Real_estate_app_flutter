@@ -13,6 +13,7 @@ export interface Client {
   email: string | null;
   is_active: boolean;
   replied_at: string | null;
+  archived_at: string | null;
   created_at: string;
   notes: string | null;
 }

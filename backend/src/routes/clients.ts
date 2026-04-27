@@ -162,6 +162,61 @@ router.patch('/:id/replied', async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// PATCH /api/clients/:id/archive — move client into "Não Ativos"
+router.patch('/:id/archive', async (req: Request, res: Response) => {
+  const clientId = req.params.id;
+
+  const { data: client } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', clientId)
+    .eq('agent_id', req.agentId!)
+    .maybeSingle();
+
+  if (!client) { res.status(404).json({ error: 'Client not found' }); return; }
+
+  const { error: updErr } = await supabase
+    .from('clients')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', clientId);
+  if (updErr) { res.status(500).json({ error: updErr.message }); return; }
+
+  await supabase
+    .from('follow_up_messages')
+    .update({ status: 'cancelled' })
+    .eq('client_id', clientId)
+    .eq('status', 'pending');
+
+  await supabase
+    .from('cold_clients')
+    .delete()
+    .eq('client_id', clientId);
+
+  res.json({ ok: true });
+});
+
+// PATCH /api/clients/:id/unarchive — restore client to Pendentes
+router.patch('/:id/unarchive', async (req: Request, res: Response) => {
+  const clientId = req.params.id;
+
+  const { data: client } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', clientId)
+    .eq('agent_id', req.agentId!)
+    .maybeSingle();
+
+  if (!client) { res.status(404).json({ error: 'Client not found' }); return; }
+
+  const { error: updErr } = await supabase
+    .from('clients')
+    .update({ archived_at: null })
+    .eq('id', clientId);
+  if (updErr) { res.status(500).json({ error: updErr.message }); return; }
+
+  res.json({ ok: true });
+});
+
 // DELETE /api/clients/:id — mirrors Python delete_client_record()
 router.delete('/:id', async (req: Request, res: Response) => {
   const clientId = req.params.id;

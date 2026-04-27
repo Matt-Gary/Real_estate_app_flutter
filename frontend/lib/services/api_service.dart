@@ -174,6 +174,22 @@ class ApiService {
     _handleResponse(res, 'Failed to mark as replied');
   }
 
+  static Future<void> archiveClient(String id) async {
+    final res = await http.patch(
+      Uri.parse('$baseUrl/clients/$id/archive'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Failed to archive client');
+  }
+
+  static Future<void> unarchiveClient(String id) async {
+    final res = await http.patch(
+      Uri.parse('$baseUrl/clients/$id/unarchive'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Failed to unarchive client');
+  }
+
   static Future<void> deleteClient(String id) async {
     final res = await http.delete(
       Uri.parse('$baseUrl/clients/$id'),
