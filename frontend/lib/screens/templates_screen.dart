@@ -74,6 +74,27 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
     }
   }
 
+  Future<void> _onReorder(int oldIndex, int newIndex) async {
+    // ReorderableListView quirk: when moving an item down, newIndex is
+    // one past its real target.
+    if (newIndex > oldIndex) newIndex -= 1;
+
+    final previous = List<dynamic>.from(_templates);
+    setState(() {
+      final moved = _templates.removeAt(oldIndex);
+      _templates.insert(newIndex, moved);
+    });
+
+    try {
+      final ids = _templates.map((t) => t['id'] as String).toList();
+      await ApiService.reorderTemplates(ids);
+    } catch (e) {
+      // Revert on failure.
+      setState(() => _templates = previous);
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -119,50 +140,107 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                 ],
               ),
             )
-          : ListView.separated(
+          : ReorderableListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: _templates.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              buildDefaultDragHandles: false,
+              onReorder: _onReorder,
               itemBuilder: (_, i) {
                 final t = _templates[i] as Map<String, dynamic>;
-                return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    title: Text(
-                      t['name'] ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      t['body'] ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          tooltip: 'Editar',
-                          onPressed: () => _openForm(template: t),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
+                return Padding(
+                  key: ValueKey(t['id']),
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: _SlotBadge(slot: t['default_slot'] as int?),
+                      title: Text(
+                        t['name'] ?? '',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        t['body'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Editar',
+                            onPressed: () => _openForm(template: t),
                           ),
-                          tooltip: 'Excluir',
-                          onPressed: () => _delete(t),
-                        ),
-                      ],
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
+                            tooltip: 'Excluir',
+                            onPressed: () => _delete(t),
+                          ),
+                          ReorderableDragStartListener(
+                            index: i,
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Icon(
+                                Icons.drag_handle,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
               },
             ),
+    );
+  }
+}
+
+class _SlotBadge extends StatelessWidget {
+  final int? slot;
+  const _SlotBadge({required this.slot});
+
+  static const _slotColors = <Color>[
+    Color(0xFF1976D2), // 1 — blue
+    Color(0xFF388E3C), // 2 — green
+    Color(0xFFF57C00), // 3 — orange
+    Color(0xFF7B1FA2), // 4 — purple
+    Color(0xFFC2185B), // 5 — pink
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (slot == null) {
+      return CircleAvatar(
+        radius: 16,
+        backgroundColor: Colors.grey.shade200,
+        child: Text(
+          '–',
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+        ),
+      );
+    }
+    final color = _slotColors[(slot! - 1).clamp(0, 4)];
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: color,
+      child: Text(
+        '$slot',
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
     );
   }
 }
@@ -183,6 +261,8 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
   final _bodyCtrl = TextEditingController();
   bool _saving = false;
   String? _error;
+  int? _selectedSlot;
+  int? _originalSlot;
 
   bool get _isEdit => widget.template != null;
 
@@ -193,6 +273,8 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
       final t = widget.template!;
       _nameCtrl.text = t['name'] ?? '';
       _bodyCtrl.text = t['body'] ?? '';
+      _originalSlot = t['default_slot'] as int?;
+      _selectedSlot = _originalSlot;
     }
   }
 
@@ -201,6 +283,43 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
     _nameCtrl.dispose();
     _bodyCtrl.dispose();
     super.dispose();
+  }
+
+  /// Assigns [slot] to template [id]. On 409 conflict, shows a confirmation
+  /// dialog and retries with force=true. Returns true if the slot was
+  /// applied (or no change needed); false if the user cancelled.
+  Future<bool> _applySlot(String id, int? slot) async {
+    try {
+      await ApiService.reassignTemplateSlot(id, slot);
+      return true;
+    } on SlotConflictException catch (conflict) {
+      if (!mounted) return false;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Slot ${conflict.slot} já em uso'),
+          content: Text(
+            'O slot ${conflict.slot} já é usado pelo template '
+            '"${conflict.conflictingTemplateName}". Deseja reatribuir o slot '
+            '${conflict.slot} para este template? O outro template ficará '
+            'sem slot padrão.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Reatribuir'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return false;
+      await ApiService.reassignTemplateSlot(id, slot, force: true);
+      return true;
+    }
   }
 
   Future<void> _save() async {
@@ -216,11 +335,32 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
         'name': _nameCtrl.text.trim(),
         'body': _bodyCtrl.text.trim(),
       };
+
+      String templateId;
       if (_isEdit) {
         await ApiService.updateTemplate(widget.template!['id'], payload);
+        templateId = widget.template!['id'] as String;
       } else {
-        await ApiService.createTemplate(payload);
+        final created = await ApiService.createTemplate(payload);
+        templateId = created['id'] as String;
       }
+
+      // Apply slot only if it changed (or it's a new template with a slot).
+      final slotChanged = _isEdit
+          ? _selectedSlot != _originalSlot
+          : _selectedSlot != null;
+      if (slotChanged) {
+        final applied = await _applySlot(templateId, _selectedSlot);
+        if (!applied) {
+          // User cancelled the swap dialog. The name/body change stuck;
+          // keep the dialog open so they can pick another slot.
+          if (mounted) {
+            setState(() => _saving = false);
+          }
+          return;
+        }
+      }
+
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -285,6 +425,28 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                         ),
                         validator: (v) =>
                             (v?.trim().isEmpty ?? true) ? 'Obrigatório' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int?>(
+                        initialValue: _selectedSlot,
+                        decoration: const InputDecoration(
+                          labelText: 'Slot padrão (mensagem 1–5)',
+                          border: OutlineInputBorder(),
+                          helperText:
+                              'Pré-preenche este slot ao criar um novo cliente',
+                        ),
+                        items: const [
+                          DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('Sem slot padrão'),
+                          ),
+                          DropdownMenuItem<int?>(value: 1, child: Text('Slot 1')),
+                          DropdownMenuItem<int?>(value: 2, child: Text('Slot 2')),
+                          DropdownMenuItem<int?>(value: 3, child: Text('Slot 3')),
+                          DropdownMenuItem<int?>(value: 4, child: Text('Slot 4')),
+                          DropdownMenuItem<int?>(value: 5, child: Text('Slot 5')),
+                        ],
+                        onChanged: (v) => setState(() => _selectedSlot = v),
                       ),
                       const SizedBox(height: 20),
                       Text(

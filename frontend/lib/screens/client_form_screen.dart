@@ -88,10 +88,14 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           _sendAt[seq] = (parsed ?? DateTime.now()).toLocal();
         }
       } else {
-        // Pre-fill slots with templates in order
-        for (int i = 0; i < templates.length && i < 5; i++) {
-          _bodyCtrl[i].text = templates[i]['body'] ?? '';
-          _selectedTemplateIds[i] = templates[i]['id'] as String;
+        // Pre-fill slots from templates with a default_slot assignment.
+        for (final t in templates) {
+          final slot = t['default_slot'];
+          if (slot is int && slot >= 1 && slot <= 5) {
+            final idx = slot - 1;
+            _bodyCtrl[idx].text = t['body'] ?? '';
+            _selectedTemplateIds[idx] = t['id'] as String;
+          }
         }
       }
     } catch (_) {}

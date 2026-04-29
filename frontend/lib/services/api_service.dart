@@ -7,6 +7,17 @@ class UnauthorizedException implements Exception {
   const UnauthorizedException();
 }
 
+class SlotConflictException implements Exception {
+  final int slot;
+  final String conflictingTemplateId;
+  final String conflictingTemplateName;
+  const SlotConflictException({
+    required this.slot,
+    required this.conflictingTemplateId,
+    required this.conflictingTemplateName,
+  });
+}
+
 class ApiService {
   // Change this to your VM IP / domain in production
   static const String baseUrl = 'http://localhost:3000/api';
@@ -272,6 +283,48 @@ class ApiService {
       headers: await _authHeaders(),
     ).timeout(_timeout);
     _handleResponse(res, 'Failed to delete template');
+  }
+
+  /// Assigns [slot] (1–5) or null to a template. When the slot is already
+  /// owned by another template and [force] is false, throws
+  /// [SlotConflictException] so the UI can confirm a swap. When [force] is
+  /// true, the previous holder's slot is cleared first.
+  static Future<Map<String, dynamic>> reassignTemplateSlot(
+    String id,
+    int? slot, {
+    bool force = false,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/templates/$id/reassign-slot'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'default_slot': slot, 'force': force}),
+    ).timeout(_timeout);
+
+    if (res.statusCode == 401) {
+      onUnauthorized?.call();
+      throw const UnauthorizedException();
+    }
+    if (res.statusCode == 409) {
+      final body = _decode(res) as Map<String, dynamic>;
+      if (body['error'] == 'slot_taken') {
+        throw SlotConflictException(
+          slot: slot!,
+          conflictingTemplateId: body['conflicting_template_id'] as String,
+          conflictingTemplateName: body['conflicting_template_name'] as String,
+        );
+      }
+    }
+    _handleResponse(res, 'Failed to assign slot');
+    return _decode(res);
+  }
+
+  static Future<void> reorderTemplates(List<String> orderedIds) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl/templates/reorder'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'ordered_ids': orderedIds}),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Failed to reorder templates');
   }
 
   // ── Cold Clients ───────────────────────────────────────────────────────────
