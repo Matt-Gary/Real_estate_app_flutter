@@ -68,14 +68,15 @@ router.post('/login', async (req: Request, res: Response) => {
     .eq('email', email.toLowerCase())
     .maybeSingle();
 
-  if (error || !agent) {
-    res.status(401).json({ error: 'Invalid email or password' });
-    return;
-  }
+  // Always run bcrypt.compare even when the user doesn't exist, so login latency
+  // doesn't leak whether the email is registered (timing-attack mitigation).
+  // The dummy hash is a real bcrypt hash of a value that will never match.
+  const DUMMY_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8.1Z9vN6g5o0X9tJ7Fz4y5wQ3wBgFa';
+  const hashToCompare = (error || !agent) ? DUMMY_HASH : agent.password_hash;
+  const valid = await bcrypt.compare(password, hashToCompare);
 
-  const valid = await bcrypt.compare(password, agent.password_hash);
-  if (!valid) {
-    res.status(401).json({ error: 'Invalid email or password' });
+  if (error || !agent || !valid) {
+    res.status(401).json({ error: 'Email ou senha inválidos' });
     return;
   }
 

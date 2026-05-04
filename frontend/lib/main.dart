@@ -67,15 +67,29 @@ class _RootRouterState extends State<_RootRouter> {
 
     if (_wasLoggedIn && !loggedIn) {
       final expired = auth.sessionExpired;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         final nav = Navigator.of(context);
         if (nav.canPop()) nav.popUntil((r) => r.isFirst);
         if (expired) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Sessão expirada. Faça login novamente.'),
-              backgroundColor: Theme.of(context).colorScheme.error,
+          // Use a modal dialog instead of a SnackBar — sessions expiring mid-edit
+          // would otherwise just flash a 4-second toast that users could miss.
+          await showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Sessão expirada'),
+              content: const Text(
+                'Sua sessão expirou por inatividade ou tempo limite. '
+                'Por segurança, você foi desconectado. '
+                'Faça login novamente para continuar.',
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
             ),
           );
           auth.consumeSessionExpired();

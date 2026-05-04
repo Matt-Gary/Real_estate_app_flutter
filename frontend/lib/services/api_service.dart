@@ -493,4 +493,210 @@ class ApiService {
     ).timeout(_timeout);
     _handleResponse(res, 'Falha ao retomar fila');
   }
+
+  // ── Labels ─────────────────────────────────────────────────────────────────
+
+  static Future<List<dynamic>> getLabels() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/labels'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao carregar etiquetas');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> createLabel({
+    required String name,
+    String? color,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/labels'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'name': name, if (color != null) 'color': color}),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao criar etiqueta');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> updateLabel(
+    String id, {
+    String? name,
+    String? color,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (color != null) body['color'] = color;
+    final res = await http.patch(
+      Uri.parse('$baseUrl/labels/$id'),
+      headers: await _authHeaders(),
+      body: jsonEncode(body),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao atualizar etiqueta');
+    return _decode(res);
+  }
+
+  static Future<void> deleteLabel(String id) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/labels/$id'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao excluir etiqueta');
+  }
+
+  static Future<List<dynamic>> getClientsByLabel(String labelId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/labels/$labelId/clients'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao listar clientes da etiqueta');
+    return _decode(res);
+  }
+
+  static Future<List<dynamic>> getClientLabels(String clientId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/clients/$clientId/labels'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao carregar etiquetas do cliente');
+    return _decode(res);
+  }
+
+  static Future<void> setClientLabels(
+    String clientId,
+    List<String> labelIds,
+  ) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/clients/$clientId/labels'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'labelIds': labelIds}),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao salvar etiquetas');
+  }
+
+  // ── Campaigns ──────────────────────────────────────────────────────────────
+
+  static Future<List<dynamic>> getCampaigns() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/campaigns'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao carregar campanhas');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> getCampaign(String id) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/campaigns/$id'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Campanha não encontrada');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> createCampaign({
+    required String name,
+    required String labelId,
+    required String templateBody,
+    required int dailyQuota,
+    required String startAt,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/campaigns'),
+      headers: await _authHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'labelId': labelId,
+        'templateBody': templateBody,
+        'dailyQuota': dailyQuota,
+        'startAt': startAt,
+      }),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao criar campanha');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> updateCampaign(
+    String id, {
+    String? name,
+    String? labelId,
+    String? templateBody,
+    int? dailyQuota,
+    String? startAt,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (labelId != null) body['labelId'] = labelId;
+    if (templateBody != null) body['templateBody'] = templateBody;
+    if (dailyQuota != null) body['dailyQuota'] = dailyQuota;
+    if (startAt != null) body['startAt'] = startAt;
+    final res = await http.patch(
+      Uri.parse('$baseUrl/campaigns/$id'),
+      headers: await _authHeaders(),
+      body: jsonEncode(body),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao atualizar campanha');
+    return _decode(res);
+  }
+
+  static Future<void> deleteCampaign(String id) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/campaigns/$id'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao excluir campanha');
+  }
+
+  static Future<Map<String, dynamic>> previewCampaign(String id) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/campaigns/$id/preview'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao pré-visualizar campanha');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> launchCampaign(String id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/campaigns/$id/launch'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao lançar campanha');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> pauseCampaign(String id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/campaigns/$id/pause'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao pausar campanha');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> resumeCampaign(String id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/campaigns/$id/resume'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao retomar campanha');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> cancelCampaign(String id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/campaigns/$id/cancel'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao cancelar campanha');
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> getCampaignSchedule(String id) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/campaigns/$id/schedule'),
+      headers: await _authHeaders(),
+    ).timeout(_timeout);
+    _handleResponse(res, 'Falha ao carregar cronograma');
+    return _decode(res);
+  }
 }

@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { checkInstanceStatus } from '../services/evolution';
 import { sendNow } from '../services/scheduler';
 import { getTodayQuota } from '../services/counters';
-import { DAILY_LIMIT } from '../services/rateLimits';
+import { DAILY_LIMIT, localYmd } from '../services/rateLimits';
 
 const router = Router();
 router.use(requireAuth);
@@ -53,6 +53,45 @@ router.get('/stats', async (req: Request, res: Response) => {
 
   const { used, day } = await getTodayQuota(agentId);
 
+  // Break today's quota usage down by source so the dashboard can show
+  // "Follow-ups X / Campanhas Y / Total Z / Limit N".
+  const todayYmd = localYmd(new Date());
+  const todayStart = `${todayYmd}T00:00:00-03:00`;
+  const tomorrowYmd = (() => {
+    const [y, m, d] = todayYmd.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+  })();
+  const todayEnd = `${tomorrowYmd}T00:00:00-03:00`;
+
+  const breakdown = { followup: 0, cold: 0, campaign: 0 };
+  if (clientIds.length > 0) {
+    // Sent today
+    const { data: sentToday } = await supabase
+      .from('follow_up_messages')
+      .select('source')
+      .in('client_id', clientIds)
+      .gte('sent_at', todayStart)
+      .lt('sent_at', todayEnd);
+    for (const m of (sentToday ?? [])) {
+      const src = (m.source as string) ?? 'followup';
+      if (src in breakdown) (breakdown as any)[src]++;
+    }
+    // Still-pending but scheduled today (counts toward today's reservation)
+    const { data: pendingToday } = await supabase
+      .from('follow_up_messages')
+      .select('source')
+      .in('client_id', clientIds)
+      .eq('status', 'pending')
+      .gte('send_at', todayStart)
+      .lt('send_at', todayEnd);
+    for (const m of (pendingToday ?? [])) {
+      const src = (m.source as string) ?? 'followup';
+      if (src in breakdown) (breakdown as any)[src]++;
+    }
+  }
+
   const { data: alerts } = await supabase
     .from('agent_alerts')
     .select('id, kind, severity, message, created_at')
@@ -63,7 +102,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 
   res.json({
     total, active, replied, sent, pending, failed, cancelled, waStatus,
-    dailyQuota: { used, limit: DAILY_LIMIT, day },
+    dailyQuota: { used, limit: DAILY_LIMIT, day, breakdown },
     queuePaused: !!agentRow?.queue_paused_at,
     queuePausedReason: agentRow?.queue_paused_reason ?? null,
     alerts: alerts ?? [],

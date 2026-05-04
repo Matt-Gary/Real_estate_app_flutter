@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../widgets/label_chip_input.dart';
 import 'templates_screen.dart';
 
 class ClientFormScreen extends StatefulWidget {
@@ -32,6 +33,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   List<dynamic> _propertyLinks = [];
   // Positions 1-5; index 0 = position 1
   final List<String?> _selectedLinkIds = List.filled(5, null);
+
+  List<dynamic> _allLabels = [];
+  List<String> _selectedLabelIds = [];
+  List<String> _initialLabelIds = [];
 
   bool _loading = false;
   bool _loadingData = true;
@@ -68,14 +73,25 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
     }
 
     try {
-      // Always load agent templates and property links for the dropdowns
+      // Always load agent templates, property links, and labels for the dropdowns
       final results = await Future.wait([
         ApiService.getTemplates(),
         ApiService.getPropertyLinks(),
+        ApiService.getLabels(),
+        if (_isEdit)
+          ApiService.getClientLabels(widget.client['id'])
+        else
+          Future.value(<dynamic>[]),
       ]);
       final templates = results[0];
       _templates = templates;
       _propertyLinks = results[1];
+      _allLabels = results[2];
+      final clientLabels = results[3];
+      _selectedLabelIds = clientLabels
+          .map<String>((l) => l['id'] as String)
+          .toList();
+      _initialLabelIds = List<String>.from(_selectedLabelIds);
 
       if (_isEdit) {
         final msgs = await ApiService.getMessages(widget.client['id']);
@@ -84,7 +100,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
           if (seq < 0 || seq > 4) continue;
           _bodyCtrl[seq].text = m['body'] ?? '';
           final rawSendAt = m['send_at'] as String?;
-          final parsed = rawSendAt == null ? null : DateTime.tryParse(rawSendAt);
+          final parsed = rawSendAt == null
+              ? null
+              : DateTime.tryParse(rawSendAt);
           _sendAt[seq] = (parsed ?? DateTime.now()).toLocal();
         }
       } else {
@@ -210,7 +228,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       return 'Mensagens ao mesmo cliente precisam ter pelo menos 48 horas de intervalo.';
     }
     if (raw.contains('DAILY_LIMIT_EXCEEDED')) {
-      return 'Limite diário de 100 mensagens por agente seria excedido. '
+      return 'Limite diário de 200 mensagens por agente seria excedido. '
           'Redistribua mensagens para outros dias.';
     }
     return raw;
@@ -229,15 +247,19 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       if (_sendAt[i] == null) continue;
       final t = _sendAt[i]!;
       if (t.hour < 8 || t.hour >= 20) {
-        setState(() => _error =
-            'Mensagem ${i + 1} está fora do horário permitido (08:00–20:00).');
+        setState(
+          () => _error =
+              'Mensagem ${i + 1} está fora do horário permitido (08:00–20:00).',
+        );
         return;
       }
       for (int j = i + 1; j < 5; j++) {
         if (_sendAt[j] == null) continue;
         if (_sendAt[j]!.difference(t).abs() < minGap) {
-          setState(() => _error =
-              'Mensagens ${i + 1} e ${j + 1} precisam ter pelo menos 48 horas de intervalo.');
+          setState(
+            () => _error =
+                'Mensagens ${i + 1} e ${j + 1} precisam ter pelo menos 48 horas de intervalo.',
+          );
           return;
         }
       }
@@ -275,6 +297,21 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       } else {
         final created = await ApiService.createClient(clientData);
         clientId = created['id'];
+      }
+
+      // Persist label set if it changed (or unconditionally on create).
+      final labelsChanged =
+          !_isEdit ||
+          _selectedLabelIds
+              .toSet()
+              .difference(_initialLabelIds.toSet())
+              .isNotEmpty ||
+          _initialLabelIds
+              .toSet()
+              .difference(_selectedLabelIds.toSet())
+              .isNotEmpty;
+      if (labelsChanged) {
+        await ApiService.setClientLabels(clientId, _selectedLabelIds);
       }
 
       final messages = <Map<String, dynamic>>[];
@@ -368,6 +405,23 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                     ),
                     _field(_emailCtrl, 'Email', hint: 'client@email.com'),
                     ..._buildLinkSlots(),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Etiquetas',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    LabelChipInput(
+                      allLabels: _allLabels,
+                      selectedIds: _selectedLabelIds,
+                      onChanged: (next) =>
+                          setState(() => _selectedLabelIds = next),
+                      onLabelCreated: (label) =>
+                          setState(() => _allLabels = [..._allLabels, label]),
+                    ),
+                    const SizedBox(height: 16),
                     _field(_notesCtrl, 'Observações', maxLines: 3),
                     if (_error != null) ...[
                       const SizedBox(height: 12),

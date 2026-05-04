@@ -12,7 +12,8 @@
       "Bash(find /c/Projects/real_estate_app/Real_estate_app_flutter/frontend -name \"*.dart\" -exec grep -l \"qr\\\\|instance\\\\|connect\" {} \\\\;)",
       "Bash(find /c/Projects/real_estate_app/Real_estate_app_flutter/frontend -name \"login_screen.dart\" -exec cat {} \\\\;)",
       "Bash(git log:*)",
-      "Read(//mnt/c/Projects/real_estate_app/**)"
+      "Read(//mnt/c/Projects/real_estate_app/**)",
+      "Bash(grep -E \"\\\\.ts$\")"
     ]
   }
 }

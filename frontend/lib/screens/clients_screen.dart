@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'client_form_screen.dart';
 import 'templates_screen.dart';
 import '../services/api_service.dart';
+import '../widgets/label_chip_input.dart';
 
 class ClientsScreen extends StatefulWidget {
   const ClientsScreen({super.key});
@@ -29,7 +30,11 @@ class _ClientsScreenState extends State<ClientsScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.indexIsChanging) setState(() {});
+      if (_tabController.indexIsChanging) {
+        // Clear selection when switching tabs — stale selections from a
+        // different list could otherwise drive accidental bulk actions.
+        setState(() => _selectedIds.clear());
+      }
     });
     _loadAll();
   }
@@ -236,7 +241,27 @@ class _ClientsScreenState extends State<ClientsScreen>
       context,
       MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
     );
-    if (mounted) _load();
+    if (mounted) _loadAll();
+  }
+
+  // Opens the regular client form for a client living in the Frios tab,
+  // so the agent can manage labels/contact info even on cold-campaign clients.
+  Future<void> _openClientFromCold(dynamic cold) async {
+    try {
+      final client = await ApiService.getClient(cold['client_id'] as String);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
+      );
+      if (mounted) _loadAll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro ao abrir cliente: $e')));
+      }
+    }
   }
 
   Future<void> _resetClientMessages(dynamic client) async {
@@ -622,6 +647,7 @@ class _ClientsScreenState extends State<ClientsScreen>
                 cold: c,
                 onToggle: () => _toggleColdActive(c),
                 onEdit: () => _openColdConfigDialog(coldClient: c),
+                onEditClient: () => _openClientFromCold(c),
                 onDelete: () => _deleteColdClient(c),
                 onMoveToPendentes: () => _moveColdToPendentes(c),
                 onArchive: () => _archiveColdClient(c),
@@ -697,6 +723,13 @@ class _ClientRow extends StatelessWidget {
                     client['phone_number'],
                     style: const TextStyle(color: Colors.grey, fontSize: 13),
                   ),
+                  if ((client['labels'] as List<dynamic>? ?? [])
+                      .isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    LabelChipsDisplay(
+                      labels: client['labels'] as List<dynamic>,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -844,6 +877,7 @@ class _ColdClientRow extends StatelessWidget {
   final dynamic cold;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
+  final VoidCallback onEditClient;
   final VoidCallback onDelete;
   final VoidCallback onMoveToPendentes;
   final VoidCallback onArchive;
@@ -852,6 +886,7 @@ class _ColdClientRow extends StatelessWidget {
     required this.cold,
     required this.onToggle,
     required this.onEdit,
+    required this.onEditClient,
     required this.onDelete,
     required this.onMoveToPendentes,
     required this.onArchive,
@@ -920,6 +955,10 @@ class _ColdClientRow extends StatelessWidget {
                         ),
                     ],
                   ),
+                  if ((cold['labels'] as List<dynamic>? ?? []).isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    LabelChipsDisplay(labels: cold['labels'] as List<dynamic>),
+                  ],
                 ],
               ),
             ),
@@ -940,7 +979,13 @@ class _ColdClientRow extends StatelessWidget {
               onPressed: onArchive,
             ),
             IconButton(
+              icon: const Icon(Icons.person_outline, size: 18),
+              tooltip: 'Editar cliente (etiquetas, contato)',
+              onPressed: onEditClient,
+            ),
+            IconButton(
               icon: const Icon(Icons.edit, size: 18),
+              tooltip: 'Editar campanha fria',
               onPressed: onEdit,
             ),
             IconButton(
@@ -1105,9 +1150,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
         !_templates.any((t) => t['id'] == _selectedTemplateId)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Selecione um template de mensagem antes de salvar.',
-          ),
+          content: Text('Selecione um template de mensagem antes de salvar.'),
         ),
       );
       return;

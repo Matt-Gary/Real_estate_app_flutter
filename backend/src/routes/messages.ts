@@ -120,7 +120,7 @@ router.put('/clients/:clientId/messages', async (req: Request, res: Response) =>
     }
   }
 
-  // ── Anti-ban validation: 100 sends / agent / day (APP_TZ) ─────────────────
+  // ── Anti-ban validation: DAILY_LIMIT sends / agent / day (APP_TZ) ─────────
   // Delta per day = (+1 for each incoming) - (1 for each replaced pending/sent)
   const dayDelta: Record<string, number> = {};
   for (const m of messages) {
