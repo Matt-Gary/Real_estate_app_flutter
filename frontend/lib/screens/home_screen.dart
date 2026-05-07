@@ -5,6 +5,7 @@ import 'dashboard_screen.dart';
 import 'clients_screen.dart';
 import 'templates_screen.dart';
 import 'imoveis_screen.dart';
+import 'campaigns_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = const [
     DashboardScreen(),
     ClientsScreen(),
+    CampaignsScreen(),
     TemplatesScreen(),
     ImobeisScreen(),
   ];
@@ -62,6 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icon(Icons.people_outline),
                 selectedIcon: Icon(Icons.people),
                 label: Text('Clientes'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.campaign_outlined),
+                selectedIcon: Icon(Icons.campaign),
+                label: Text('Campanhas'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.message_outlined),

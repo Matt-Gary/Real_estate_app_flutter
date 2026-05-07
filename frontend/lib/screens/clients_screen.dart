@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'client_form_screen.dart';
 import 'templates_screen.dart';
 import '../services/api_service.dart';
+import '../widgets/label_chip_input.dart';
 
 class ClientsScreen extends StatefulWidget {
   const ClientsScreen({super.key});
@@ -22,14 +23,22 @@ class _ClientsScreenState extends State<ClientsScreen>
   bool _coldLoading = true;
   String? _coldError;
 
+  // ── Label filter ──────────────────────────────────────────────────────────
+  List<dynamic> _labels = [];
+  String? _selectedLabelId;
+
   late final TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.indexIsChanging) setState(() {});
+      if (_tabController.indexIsChanging) {
+        // Clear selection when switching tabs — stale selections from a
+        // different list could otherwise drive accidental bulk actions.
+        setState(() => _selectedIds.clear());
+      }
     });
     _loadAll();
   }
@@ -40,7 +49,37 @@ class _ClientsScreenState extends State<ClientsScreen>
     super.dispose();
   }
 
-  Future<void> _loadAll() => Future.wait([_load(), _loadCold()]);
+  Future<void> _loadAll() => Future.wait([_load(), _loadCold(), _loadLabels()]);
+
+  Future<void> _loadLabels() async {
+    try {
+      final l = await ApiService.getLabels();
+      if (!mounted) return;
+      setState(() => _labels = l);
+    } catch (_) {
+      // Non-fatal: dropdown degrades to "Todas" only.
+    }
+  }
+
+  List<dynamic> _applyLabelFilter(List<dynamic> source) {
+    final id = _selectedLabelId;
+    if (id == null) return source;
+    return source.where((c) {
+      final labels = (c['labels'] as List?) ?? const [];
+      return labels.any((l) => (l as Map)['id'] == id);
+    }).toList();
+  }
+
+  Color _labelDotColor(dynamic label) {
+    final hex = label['color'] as String?;
+    if (hex == null) return Colors.blueGrey.shade400;
+    final s = hex.replaceFirst('#', '');
+    if (s.length == 6) {
+      final v = int.tryParse(s, radix: 16);
+      if (v != null) return Color(0xFF000000 | v);
+    }
+    return Colors.blueGrey.shade400;
+  }
 
   Future<void> _load() async {
     setState(() {
@@ -77,6 +116,90 @@ class _ClientsScreenState extends State<ClientsScreen>
   }
 
   // ── Pendentes actions ─────────────────────────────────────────────────────
+
+  Future<void> _archiveClient(dynamic client) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Mover para Não Ativos'),
+        content: Text(
+          'Mover ${client["name"]} para Clientes Não Ativos?\n\n'
+          'Todos os agendamentos pendentes serão cancelados e qualquer '
+          'campanha fria será encerrada.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ApiService.archiveClient(client['id'] as String);
+      if (!mounted) return;
+      setState(() => _selectedIds.remove(client['id'] as String));
+      _loadAll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro: $e')));
+      }
+    }
+  }
+
+  Future<void> _unarchiveClient(dynamic client) async {
+    try {
+      await ApiService.unarchiveClient(client['id'] as String);
+      if (mounted) _loadAll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro: $e')));
+      }
+    }
+  }
+
+  Future<void> _archiveColdClient(dynamic cold) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Mover para Não Ativos'),
+        content: Text(
+          'Mover ${cold["client_name"]} para Clientes Não Ativos?\n\n'
+          'A campanha fria será encerrada e nenhuma mensagem será enviada.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ApiService.archiveClient(cold['client_id'] as String);
+      if (mounted) _loadAll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro: $e')));
+      }
+    }
+  }
 
   Future<void> _markReplied(dynamic client) async {
     final ok = await showDialog<bool>(
@@ -152,7 +275,27 @@ class _ClientsScreenState extends State<ClientsScreen>
       context,
       MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
     );
-    if (mounted) _load();
+    if (mounted) _loadAll();
+  }
+
+  // Opens the regular client form for a client living in the Frios tab,
+  // so the agent can manage labels/contact info even on cold-campaign clients.
+  Future<void> _openClientFromCold(dynamic cold) async {
+    try {
+      final client = await ApiService.getClient(cold['client_id'] as String);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ClientFormScreen(client: client)),
+      );
+      if (mounted) _loadAll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erro ao abrir cliente: $e')));
+      }
+    }
   }
 
   Future<void> _resetClientMessages(dynamic client) async {
@@ -200,12 +343,16 @@ class _ClientsScreenState extends State<ClientsScreen>
     dynamic coldClient,
     bool directAdd = false,
   }) async {
-    // Compute clients not yet in an active cold campaign
+    // Compute clients not yet in an active cold campaign and not archived
     final coldClientIds = _coldClients
         .map((c) => c['client_id'] as String)
         .toSet();
     final availableClients = _clients
-        .where((c) => !coldClientIds.contains(c['id'] as String))
+        .where(
+          (c) =>
+              !coldClientIds.contains(c['id'] as String) &&
+              c['archived_at'] == null,
+        )
         .toList();
 
     await showDialog(
@@ -332,13 +479,18 @@ class _ClientsScreenState extends State<ClientsScreen>
             tabs: const [
               Tab(text: 'Clientes Pendentes'),
               Tab(text: 'Clientes Frios'),
+              Tab(text: 'Clientes Não Ativos'),
             ],
           ),
           const SizedBox(height: 16),
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [_buildPendentesTab(), _buildFriosTab()],
+              children: [
+                _buildPendentesTab(),
+                _buildFriosTab(),
+                _buildNaoAtivosTab(),
+              ],
             ),
           ),
         ],
@@ -346,9 +498,64 @@ class _ClientsScreenState extends State<ClientsScreen>
     );
   }
 
+  Widget _buildLabelFilter() {
+    return SizedBox(
+      width: 220,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Etiqueta',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          border: OutlineInputBorder(),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String?>(
+            value: _selectedLabelId,
+            isDense: true,
+            isExpanded: true,
+            onChanged: (v) => setState(() => _selectedLabelId = v),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('— Todas —'),
+              ),
+              ..._labels.map((l) {
+                final id = l['id'] as String;
+                final name = l['name'] as String? ?? '';
+                final color = _labelDotColor(l);
+                return DropdownMenuItem<String?>(
+                  value: id,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     final hasSelection = _selectedIds.isNotEmpty;
-    final onFriosTab = _tabController.index == 1;
+    final tabIndex = _tabController.index;
+    final onPendentesTab = tabIndex == 0;
+    final onFriosTab = tabIndex == 1;
     return Row(
       children: [
         Text(
@@ -358,7 +565,7 @@ class _ClientsScreenState extends State<ClientsScreen>
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         const Spacer(),
-        if (hasSelection) ...[
+        if (hasSelection && onPendentesTab) ...[
           Text(
             '${_selectedIds.length} selecionado(s)',
             style: const TextStyle(color: Colors.grey),
@@ -376,6 +583,8 @@ class _ClientsScreenState extends State<ClientsScreen>
             child: const Text('Cancelar'),
           ),
         ] else ...[
+          _buildLabelFilter(),
+          const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: _loadAll,
             icon: const Icon(Icons.refresh, size: 18),
@@ -388,7 +597,7 @@ class _ClientsScreenState extends State<ClientsScreen>
               icon: const Icon(Icons.ac_unit, size: 18),
               label: const Text('Adicionar para Frios'),
             )
-          else
+          else if (onPendentesTab)
             FilledButton.icon(
               onPressed: () => _openForm(),
               icon: const Icon(Icons.add, size: 18),
@@ -409,13 +618,19 @@ class _ClientsScreenState extends State<ClientsScreen>
       return Text(_error!, style: const TextStyle(color: Colors.red));
     }
 
-    // Hide clients already in an active cold campaign
+    // Hide clients already in an active cold campaign or archived
     final coldClientIds = _coldClients
         .map((c) => c['client_id'] as String)
         .toSet();
-    final pendentes = _clients
-        .where((c) => !coldClientIds.contains(c['id'] as String))
-        .toList();
+    final pendentes = _applyLabelFilter(
+      _clients
+          .where(
+            (c) =>
+                !coldClientIds.contains(c['id'] as String) &&
+                c['archived_at'] == null,
+          )
+          .toList(),
+    );
 
     if (pendentes.isEmpty) {
       return const Center(
@@ -444,6 +659,57 @@ class _ClientsScreenState extends State<ClientsScreen>
                 onReplied: () => _markReplied(c),
                 onDelete: () => _deleteClient(c),
                 onReset: () => _resetClientMessages(c),
+                onArchive: () => _archiveClient(c),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  // ── Não Ativos tab ────────────────────────────────────────────────────────
+
+  Widget _buildNaoAtivosTab() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Text(_error!, style: const TextStyle(color: Colors.red));
+    }
+
+    final naoAtivos =
+        _applyLabelFilter(
+            _clients.where((c) => c['archived_at'] != null).toList(),
+          )
+          ..sort((a, b) {
+        final aDt =
+            DateTime.tryParse(a['archived_at'] as String) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bDt =
+            DateTime.tryParse(b['archived_at'] as String) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return aDt.compareTo(bDt);
+      });
+
+    if (naoAtivos.isEmpty) {
+      return const Center(
+        child: Text(
+          'Nenhum cliente não ativo. Arquive clientes a partir de Pendentes ou Frios.',
+          style: TextStyle(color: Colors.grey),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      child: Column(
+        children: naoAtivos
+            .map(
+              (c) => _ClientRow(
+                client: c,
+                selected: false,
+                showCheckbox: false,
+                onSelect: (_) {},
+                onEdit: () => _openForm(client: c),
+                onDelete: () => _deleteClient(c),
+                onUnarchive: () => _unarchiveClient(c),
               ),
             )
             .toList(),
@@ -458,7 +724,8 @@ class _ClientsScreenState extends State<ClientsScreen>
     if (_coldError != null) {
       return Text(_coldError!, style: const TextStyle(color: Colors.red));
     }
-    if (_coldClients.isEmpty) {
+    final frios = _applyLabelFilter(_coldClients);
+    if (frios.isEmpty) {
       return const Center(
         child: Text(
           'Nenhum cliente frio. Selecione clientes na aba Pendentes e clique em "Enviar para Clientes Frios".',
@@ -469,14 +736,16 @@ class _ClientsScreenState extends State<ClientsScreen>
     }
     return SingleChildScrollView(
       child: Column(
-        children: _coldClients
+        children: frios
             .map(
               (c) => _ColdClientRow(
                 cold: c,
                 onToggle: () => _toggleColdActive(c),
                 onEdit: () => _openColdConfigDialog(coldClient: c),
+                onEditClient: () => _openClientFromCold(c),
                 onDelete: () => _deleteColdClient(c),
                 onMoveToPendentes: () => _moveColdToPendentes(c),
+                onArchive: () => _archiveColdClient(c),
               ),
             )
             .toList(),
@@ -492,18 +761,24 @@ class _ClientRow extends StatelessWidget {
   final bool selected;
   final ValueChanged<bool> onSelect;
   final VoidCallback onEdit;
-  final VoidCallback onReplied;
+  final VoidCallback? onReplied;
   final VoidCallback onDelete;
-  final VoidCallback onReset;
+  final VoidCallback? onReset;
+  final VoidCallback? onArchive;
+  final VoidCallback? onUnarchive;
+  final bool showCheckbox;
 
   const _ClientRow({
     required this.client,
     required this.selected,
     required this.onSelect,
     required this.onEdit,
-    required this.onReplied,
     required this.onDelete,
-    required this.onReset,
+    this.onReplied,
+    this.onReset,
+    this.onArchive,
+    this.onUnarchive,
+    this.showCheckbox = true,
   });
 
   @override
@@ -521,8 +796,10 @@ class _ClientRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Checkbox(value: selected, onChanged: (v) => onSelect(v ?? false)),
-            const SizedBox(width: 4),
+            if (showCheckbox) ...[
+              Checkbox(value: selected, onChanged: (v) => onSelect(v ?? false)),
+              const SizedBox(width: 4),
+            ],
             Icon(
               Icons.circle,
               size: 10,
@@ -541,12 +818,23 @@ class _ClientRow extends StatelessWidget {
                     client['phone_number'],
                     style: const TextStyle(color: Colors.grey, fontSize: 13),
                   ),
+                  if ((client['labels'] as List<dynamic>? ?? [])
+                      .isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    LabelChipsDisplay(
+                      labels: client['labels'] as List<dynamic>,
+                    ),
+                  ],
                 ],
               ),
             ),
             Builder(
               builder: (_) {
                 final optedOut = client['opted_out_at'] != null;
+                final archived = client['archived_at'] != null;
+                // For archived clients (without opt-out), the brown
+                // "Arquivado em ..." chip below replaces the status badge.
+                if (archived && !optedOut) return const SizedBox.shrink();
                 final Color color;
                 final String label;
                 if (optedOut) {
@@ -560,7 +848,10 @@ class _ClientRow extends StatelessWidget {
                   label = 'Respondido';
                 }
                 final chip = Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
@@ -582,8 +873,37 @@ class _ClientRow extends StatelessWidget {
                 return chip;
               },
             ),
+            if (client['archived_at'] != null) ...[
+              const SizedBox(width: 6),
+              Builder(
+                builder: (_) {
+                  final dt = DateTime.tryParse(
+                    client['archived_at'] as String,
+                  )?.toLocal();
+                  final label = dt == null
+                      ? 'Arquivado'
+                      : 'Arquivado em ${dt.day.toString().padLeft(2, '0')}/'
+                            '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.brown.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      label,
+                      style: const TextStyle(fontSize: 12, color: Colors.brown),
+                    ),
+                  );
+                },
+              ),
+            ],
             const SizedBox(width: 8),
-            if ((client['total_count'] ?? 0) > 0) ...[
+            if ((client['total_count'] ?? 0) > 0 &&
+                client['archived_at'] == null) ...[
               Text(
                 '${client['sent_count']}/${client['total_count']}',
                 style: const TextStyle(
@@ -592,23 +912,44 @@ class _ClientRow extends StatelessWidget {
                   color: Colors.blueAccent,
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.restart_alt, size: 18),
-                tooltip: 'Resetar ciclo',
-                color: Colors.orange,
-                onPressed: onReset,
-              ),
+              if (onReset != null)
+                IconButton(
+                  icon: const Icon(Icons.restart_alt, size: 18),
+                  tooltip: 'Resetar ciclo',
+                  color: Colors.orange,
+                  onPressed: onReset,
+                ),
             ] else
               const SizedBox(width: 12),
             IconButton(
               icon: const Icon(Icons.edit, size: 18),
               onPressed: onEdit,
             ),
-            if (isActive)
+            if (isActive && onReplied != null)
               IconButton(
                 icon: const Icon(Icons.check_circle_outline, size: 18),
                 tooltip: 'Marcar como respondido',
                 onPressed: onReplied,
+              ),
+            if (onArchive != null)
+              IconButton(
+                icon: const Icon(
+                  Icons.archive_outlined,
+                  size: 18,
+                  color: Colors.brown,
+                ),
+                tooltip: 'Mover para Não Ativos',
+                onPressed: onArchive,
+              ),
+            if (onUnarchive != null)
+              IconButton(
+                icon: const Icon(
+                  Icons.unarchive_outlined,
+                  size: 18,
+                  color: Colors.green,
+                ),
+                tooltip: 'Reativar (mover para Pendentes)',
+                onPressed: onUnarchive,
               ),
             IconButton(
               icon: const Icon(
@@ -631,15 +972,19 @@ class _ColdClientRow extends StatelessWidget {
   final dynamic cold;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
+  final VoidCallback onEditClient;
   final VoidCallback onDelete;
   final VoidCallback onMoveToPendentes;
+  final VoidCallback onArchive;
 
   const _ColdClientRow({
     required this.cold,
     required this.onToggle,
     required this.onEdit,
+    required this.onEditClient,
     required this.onDelete,
     required this.onMoveToPendentes,
+    required this.onArchive,
   });
 
   @override
@@ -705,6 +1050,10 @@ class _ColdClientRow extends StatelessWidget {
                         ),
                     ],
                   ),
+                  if ((cold['labels'] as List<dynamic>? ?? []).isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    LabelChipsDisplay(labels: cold['labels'] as List<dynamic>),
+                  ],
                 ],
               ),
             ),
@@ -716,7 +1065,22 @@ class _ColdClientRow extends StatelessWidget {
               onPressed: onMoveToPendentes,
             ),
             IconButton(
+              icon: const Icon(
+                Icons.archive_outlined,
+                size: 18,
+                color: Colors.brown,
+              ),
+              tooltip: 'Mover para Não Ativos',
+              onPressed: onArchive,
+            ),
+            IconButton(
+              icon: const Icon(Icons.person_outline, size: 18),
+              tooltip: 'Editar cliente (etiquetas, contato)',
+              onPressed: onEditClient,
+            ),
+            IconButton(
               icon: const Icon(Icons.edit, size: 18),
+              tooltip: 'Editar campanha fria',
               onPressed: onEdit,
             ),
             IconButton(
@@ -785,8 +1149,8 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
     _loadTemplates();
     if (widget.coldClient != null) {
       _selectedTemplateId = widget.coldClient['template_id'] as String?;
-      _intervalCtrl.text =
-          (widget.coldClient['interval_days'] as int? ?? 14).toString();
+      _intervalCtrl.text = (widget.coldClient['interval_days'] as int? ?? 14)
+          .toString();
       final max = widget.coldClient['max_messages'];
       if (max != null) _maxCtrl.text = max.toString();
       final nextRaw = widget.coldClient['next_send_at'] as String?;
@@ -875,6 +1239,15 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Selecione um cliente.')));
+      return;
+    }
+    if (_selectedTemplateId == null ||
+        !_templates.any((t) => t['id'] == _selectedTemplateId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecione um template de mensagem antes de salvar.'),
+        ),
+      );
       return;
     }
     if (_firstSendAt == null) {
@@ -1004,7 +1377,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
 
               // Template
               const Text(
-                'Template de mensagem',
+                'Template de mensagem *',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 6),
@@ -1022,7 +1395,7 @@ class _ColdConfigDialogState extends State<_ColdConfigDialog> {
                   isExpanded: true,
                   underline: const SizedBox.shrink(),
                   isDense: true,
-                  hint: const Text('Selecionar template'),
+                  hint: const Text('Selecionar template *'),
                   items: [
                     const DropdownMenuItem<String>(
                       value: null,

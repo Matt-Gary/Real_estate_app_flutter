@@ -3,7 +3,7 @@
 
 export const APP_TZ = process.env.TZ ?? 'America/Sao_Paulo';
 
-export const DAILY_LIMIT = 100;
+export const DAILY_LIMIT = 200;
 export const SEND_WINDOW_START_HOUR = 8;   // inclusive
 export const SEND_WINDOW_END_HOUR   = 20;  // exclusive — last allowed slot is 19:59
 export const MIN_GAP_HOURS_SAME_CLIENT = 48;

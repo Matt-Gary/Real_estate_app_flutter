@@ -92,6 +92,22 @@ router.get('/', async (req: Request, res: Response) => {
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
+  // Pull labels for the underlying clients in one round-trip and merge.
+  const clientIds = (data ?? []).map((r: any) => r.client_id);
+  const labelsByClient: Record<string, any[]> = {};
+  if (clientIds.length > 0) {
+    const { data: assignments } = await supabase
+      .from('client_label_assignments')
+      .select('client_id, client_labels(id, name, color)')
+      .in('client_id', clientIds);
+    for (const a of (assignments ?? [])) {
+      const cid = a.client_id as string;
+      const label = (a as any).client_labels;
+      if (!label) continue;
+      (labelsByClient[cid] ??= []).push(label);
+    }
+  }
+
   const result = (data ?? []).map((row: any) => ({
     id:            row.id,
     client_id:     row.client_id,
@@ -105,6 +121,7 @@ router.get('/', async (req: Request, res: Response) => {
     is_active:     row.is_active,
     next_send_at:  row.next_send_at,
     created_at:    row.created_at,
+    labels:        labelsByClient[row.client_id] ?? [],
   }));
 
   res.json(result);

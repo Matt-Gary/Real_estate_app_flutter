@@ -38,7 +38,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       await ApiService.resetPassword(_token, _newPassCtrl.text);
       setState(() => _success = true);
@@ -66,10 +69,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 const SizedBox(height: 12),
                 Text(
                   'Follow-Up Bot',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 32),
                 Card(
@@ -91,8 +93,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     if (_token.isEmpty) {
       return Column(
         children: [
-          Icon(Icons.link_off,
-              size: 48, color: Theme.of(context).colorScheme.error),
+          Icon(
+            Icons.link_off,
+            size: 48,
+            color: Theme.of(context).colorScheme.error,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Link de reset inválido',
@@ -114,10 +119,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         children: [
           Text(
             'Definir nova senha',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -131,7 +135,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _confirmPassCtrl,
-            decoration: const InputDecoration(labelText: 'Confirmar nova senha'),
+            decoration: const InputDecoration(
+              labelText: 'Confirmar nova senha',
+            ),
             obscureText: true,
             validator: (v) =>
                 v != _newPassCtrl.text ? 'Senhas não correspondem' : null,
@@ -163,8 +169,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Widget _buildSuccess() {
     return Column(
       children: [
-        Icon(Icons.check_circle_outline,
-            size: 56, color: Theme.of(context).colorScheme.primary),
+        Icon(
+          Icons.check_circle_outline,
+          size: 56,
+          color: Theme.of(context).colorScheme.primary,
+        ),
         const SizedBox(height: 16),
         const Text(
           'Senha redefinida!',

@@ -43,20 +43,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _sendNow() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enviar agora?'),
+        content: const Text(
+          'Isso enviará imediatamente todas as mensagens pendentes para hoje. '
+          'Esta ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     setState(() => _sending = true);
     try {
       final res = await ApiService.sendNow();
       if (mounted) {
+        final n = res['sent'] ?? 0;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sent ${res['sent']} message(s)')),
+          SnackBar(
+            content: Text(
+              n == 0
+                  ? 'Nenhuma mensagem pendente para enviar.'
+                  : '$n mensagem(ns) enviada(s).',
+            ),
+            duration: const Duration(seconds: 6),
+          ),
         );
       }
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao enviar: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -191,7 +221,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ...statCards.map((d) => _StatCard(data: d)),
             _QuotaCard(
               used: (quota['used'] as num?)?.toInt() ?? 0,
-              limit: (quota['limit'] as num?)?.toInt() ?? 100,
+              limit: (quota['limit'] as num?)?.toInt() ?? 200,
+              breakdown: (quota['breakdown'] as Map?)?.cast<String, dynamic>(),
             ),
           ],
         ),
@@ -383,20 +414,34 @@ class _QrCodeDialog extends StatefulWidget {
 
 class _QrCodeDialogState extends State<_QrCodeDialog> {
   Timer? _timer;
+  Timer? _timeoutTimer;
   Uint8List? _qrBytes;
   String _status = 'Gerando QR code...';
   bool _error = false;
+
+  static const _pollTimeout = Duration(minutes: 5);
 
   @override
   void initState() {
     super.initState();
     _poll(); // fetch immediately, then every 3s
     _timer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
+    // Stop polling after 5 minutes to avoid indefinite background load
+    // if the user walks away without scanning.
+    _timeoutTimer = Timer(_pollTimeout, () {
+      _timer?.cancel();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Tempo esgotado. Feche e tente novamente.';
+        _error = true;
+      });
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _timeoutTimer?.cancel();
     super.dispose();
   }
 
@@ -409,6 +454,7 @@ class _QrCodeDialogState extends State<_QrCodeDialog> {
 
       if (state == 'open') {
         _timer?.cancel();
+        _timeoutTimer?.cancel();
         widget.onConnected();
         return;
       }
@@ -489,7 +535,8 @@ class _StatData {
 class _QuotaCard extends StatelessWidget {
   final int used;
   final int limit;
-  const _QuotaCard({required this.used, required this.limit});
+  final Map<String, dynamic>? breakdown;
+  const _QuotaCard({required this.used, required this.limit, this.breakdown});
 
   @override
   Widget build(BuildContext context) {
@@ -503,9 +550,13 @@ class _QuotaCard extends StatelessWidget {
       color = const Color(0xFF3B8BD4);
     }
 
+    final followup = (breakdown?['followup'] as num?)?.toInt() ?? 0;
+    final cold     = (breakdown?['cold']     as num?)?.toInt() ?? 0;
+    final campaign = (breakdown?['campaign'] as num?)?.toInt() ?? 0;
+    final hasBreakdown = breakdown != null && (followup + cold + campaign) > 0;
+
     return Container(
-      width: 140,
-      height: 90,
+      width: hasBreakdown ? 200 : 140,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -538,8 +589,35 @@ class _QuotaCard extends StatelessWidget {
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
+          if (hasBreakdown) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _miniStat('Follow-up', followup, Colors.blue),
+                _miniStat('Frios', cold, Colors.brown),
+                _miniStat('Camp.', campaign, Colors.purple),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _miniStat(String label, int value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$value',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 9, color: Colors.grey),
+        ),
+      ],
     );
   }
 }

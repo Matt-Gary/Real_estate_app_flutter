@@ -24,6 +24,8 @@ import coldClientRoutes   from './routes/cold_clients';
 import propertyLinkRoutes from './routes/property_links';
 import whatsappRoutes     from './routes/whatsapp';
 import webhookRoutes      from './routes/webhooks';
+import labelRoutes        from './routes/labels';
+import campaignRoutes     from './routes/campaigns';
 
 const app  = express();
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -41,6 +43,8 @@ app.use('/api/auth',            authRoutes);
 app.use('/api/webhooks',        webhookRoutes);   // mount BEFORE the broad '/api' router so webhooks skip JWT auth
 app.use('/api/clients',         clientRoutes);
 app.use('/api',                 messageRoutes);   // /api/clients/:id/messages
+app.use('/api',                 labelRoutes);     // /api/labels, /api/clients/:id/labels
+app.use('/api/campaigns',       campaignRoutes);
 app.use('/api/templates',       templateRoutes);
 app.use('/api/dashboard',       dashboardRoutes);
 app.use('/api/cold-clients',    coldClientRoutes);
