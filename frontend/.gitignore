@@ -48,3 +48,4 @@ app.*.map.json
 
 DEPLOY.docx
 ~$DEPLOY.docx
+~\Real_estate_app_flutter\frontend\DEPLOY.docx

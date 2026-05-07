@@ -23,6 +23,10 @@ class _ClientsScreenState extends State<ClientsScreen>
   bool _coldLoading = true;
   String? _coldError;
 
+  // ── Label filter ──────────────────────────────────────────────────────────
+  List<dynamic> _labels = [];
+  String? _selectedLabelId;
+
   late final TabController _tabController;
 
   @override
@@ -45,7 +49,37 @@ class _ClientsScreenState extends State<ClientsScreen>
     super.dispose();
   }
 
-  Future<void> _loadAll() => Future.wait([_load(), _loadCold()]);
+  Future<void> _loadAll() => Future.wait([_load(), _loadCold(), _loadLabels()]);
+
+  Future<void> _loadLabels() async {
+    try {
+      final l = await ApiService.getLabels();
+      if (!mounted) return;
+      setState(() => _labels = l);
+    } catch (_) {
+      // Non-fatal: dropdown degrades to "Todas" only.
+    }
+  }
+
+  List<dynamic> _applyLabelFilter(List<dynamic> source) {
+    final id = _selectedLabelId;
+    if (id == null) return source;
+    return source.where((c) {
+      final labels = (c['labels'] as List?) ?? const [];
+      return labels.any((l) => (l as Map)['id'] == id);
+    }).toList();
+  }
+
+  Color _labelDotColor(dynamic label) {
+    final hex = label['color'] as String?;
+    if (hex == null) return Colors.blueGrey.shade400;
+    final s = hex.replaceFirst('#', '');
+    if (s.length == 6) {
+      final v = int.tryParse(s, radix: 16);
+      if (v != null) return Color(0xFF000000 | v);
+    }
+    return Colors.blueGrey.shade400;
+  }
 
   Future<void> _load() async {
     setState(() {
@@ -464,6 +498,59 @@ class _ClientsScreenState extends State<ClientsScreen>
     );
   }
 
+  Widget _buildLabelFilter() {
+    return SizedBox(
+      width: 220,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Etiqueta',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          border: OutlineInputBorder(),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String?>(
+            value: _selectedLabelId,
+            isDense: true,
+            isExpanded: true,
+            onChanged: (v) => setState(() => _selectedLabelId = v),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('— Todas —'),
+              ),
+              ..._labels.map((l) {
+                final id = l['id'] as String;
+                final name = l['name'] as String? ?? '';
+                final color = _labelDotColor(l);
+                return DropdownMenuItem<String?>(
+                  value: id,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     final hasSelection = _selectedIds.isNotEmpty;
     final tabIndex = _tabController.index;
@@ -496,6 +583,8 @@ class _ClientsScreenState extends State<ClientsScreen>
             child: const Text('Cancelar'),
           ),
         ] else ...[
+          _buildLabelFilter(),
+          const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: _loadAll,
             icon: const Icon(Icons.refresh, size: 18),
@@ -533,13 +622,15 @@ class _ClientsScreenState extends State<ClientsScreen>
     final coldClientIds = _coldClients
         .map((c) => c['client_id'] as String)
         .toSet();
-    final pendentes = _clients
-        .where(
-          (c) =>
-              !coldClientIds.contains(c['id'] as String) &&
-              c['archived_at'] == null,
-        )
-        .toList();
+    final pendentes = _applyLabelFilter(
+      _clients
+          .where(
+            (c) =>
+                !coldClientIds.contains(c['id'] as String) &&
+                c['archived_at'] == null,
+          )
+          .toList(),
+    );
 
     if (pendentes.isEmpty) {
       return const Center(
@@ -584,8 +675,11 @@ class _ClientsScreenState extends State<ClientsScreen>
       return Text(_error!, style: const TextStyle(color: Colors.red));
     }
 
-    final naoAtivos = _clients.where((c) => c['archived_at'] != null).toList()
-      ..sort((a, b) {
+    final naoAtivos =
+        _applyLabelFilter(
+            _clients.where((c) => c['archived_at'] != null).toList(),
+          )
+          ..sort((a, b) {
         final aDt =
             DateTime.tryParse(a['archived_at'] as String) ??
             DateTime.fromMillisecondsSinceEpoch(0);
@@ -630,7 +724,8 @@ class _ClientsScreenState extends State<ClientsScreen>
     if (_coldError != null) {
       return Text(_coldError!, style: const TextStyle(color: Colors.red));
     }
-    if (_coldClients.isEmpty) {
+    final frios = _applyLabelFilter(_coldClients);
+    if (frios.isEmpty) {
       return const Center(
         child: Text(
           'Nenhum cliente frio. Selecione clientes na aba Pendentes e clique em "Enviar para Clientes Frios".',
@@ -641,7 +736,7 @@ class _ClientsScreenState extends State<ClientsScreen>
     }
     return SingleChildScrollView(
       child: Column(
-        children: _coldClients
+        children: frios
             .map(
               (c) => _ColdClientRow(
                 cold: c,
