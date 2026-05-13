@@ -136,7 +136,11 @@ router.get('/qrcode', async (req: Request, res: Response) => {
 });
 
 // POST /api/whatsapp/disconnect
-// Logs out the WhatsApp session (phone disconnects) but keeps the instance slot.
+// Logs out the WhatsApp session. If Evolution's logout endpoint is stuck
+// (instance wedged on Baileys side), falls back to deleting the instance so
+// the next /connect call creates a fresh one — otherwise the user would be
+// permanently locked into a misleading "disconnected in UI, stuck on Evolution"
+// state where clicking Conectar does nothing (createInstance returns "already exists").
 router.post('/disconnect', async (req: Request, res: Response) => {
   const agentId = req.agentId!;
   try {
@@ -146,14 +150,28 @@ router.post('/disconnect', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No WhatsApp instance configured.' });
     }
 
-    await logoutInstance(instanceName);
+    let usedHardReset = false;
+    try {
+      await logoutInstance(instanceName);
+    } catch (logoutErr: any) {
+      console.warn(
+        `[WhatsApp] logout failed for ${instanceName}, falling back to delete:`,
+        logoutErr.message,
+      );
+      await deleteInstance(instanceName);
+      usedHardReset = true;
+    }
 
     await supabase
       .from('agents')
-      .update({ whatsapp_connected_at: null })
+      .update(
+        usedHardReset
+          ? { whatsapp_instance_name: null, whatsapp_connected_at: null }
+          : { whatsapp_connected_at: null },
+      )
       .eq('id', agentId);
 
-    res.json({ ok: true });
+    res.json({ ok: true, hardReset: usedHardReset });
   } catch (err: any) {
     console.error('[WhatsApp] /disconnect error:', err.message);
     res.status(502).json({ error: err.message });
