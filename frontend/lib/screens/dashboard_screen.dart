@@ -140,8 +140,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (confirmed != true) return;
     try {
-      await ApiService.whatsappDisconnect();
-      if (mounted) await _load();
+      final result = await ApiService.whatsappDisconnect();
+      if (!mounted) return;
+      if (result['hardReset'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sessão reiniciada do zero. Clique em Conectar WhatsApp para escanear um novo QR Code.',
+            ),
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+      await _load();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
