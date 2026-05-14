@@ -24,7 +24,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   late List<DateTime?> _sendAt;
 
   List<dynamic> _templates = [];
-  List<String?> _selectedTemplateIds = List.generate(5, (_) => null);
+  final List<String?> _selectedTemplateIds = List.generate(5, (_) => null);
   final List<GlobalKey<FormFieldState<String?>>> _dropdownKeys = List.generate(
     5,
     (_) => GlobalKey<FormFieldState<String?>>(),
