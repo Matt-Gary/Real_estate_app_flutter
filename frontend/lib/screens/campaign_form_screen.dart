@@ -123,10 +123,12 @@ class _CampaignFormScreenState extends State<CampaignFormScreen> {
         return null;
       case 2:
         final h = _startAt.hour;
-        if (h < 8 || h >= 20)
+        if (h < 8 || h >= 20) {
           return 'O horário de início deve estar entre 08:00 e 20:00.';
-        if (_startAt.isBefore(DateTime.now()))
+        }
+        if (_startAt.isBefore(DateTime.now())) {
           return 'O início não pode estar no passado.';
+        }
         if (_dailyQuota < 1 || _dailyQuota > _agentLimit) {
           return 'Quota diária inválida (1–$_agentLimit).';
         }

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { sendTextMessage, formatMessage } from './evolution';
+import { sendTextMessage, formatMessage, getConnectionState } from './evolution';
 import { applyJitter, sleep, localYmd } from './rateLimits';
 import { recordSent, applyScheduledDelta } from './counters';
 
@@ -47,6 +47,33 @@ function isTransientFailure(statusCode: number | null): boolean {
   return false;
 }
 
+// Surfaced verbatim on every row skipped because the WhatsApp instance is not
+// in state='open'. Kept in Portuguese to match the UI locale.
+const DISCONNECT_REASON =
+  'WhatsApp desconectado — o usuário precisa reconectar no painel';
+
+// Resolves Evolution connection state once per tick, per instanceName. A fresh
+// Map is created inside tick() / sendNow() so each scheduler wake re-checks.
+// Treats any non-'open' state (close, connecting, error, missing) as not
+// connected — fail closed so we never send into a dead instance.
+async function isInstanceConnected(
+  instanceName: string | null | undefined,
+  cache: Map<string, boolean>,
+): Promise<boolean> {
+  if (!instanceName) return false;
+  if (cache.has(instanceName)) return cache.get(instanceName)!;
+  const res = await getConnectionState(instanceName);
+  const state = res?.instance?.state ?? res?.state ?? null;
+  const open = state === 'open';
+  cache.set(instanceName, open);
+  if (!open) {
+    console.warn(
+      `[Scheduler] Instance ${instanceName} not connected (state=${state}) — skipping sends.`,
+    );
+  }
+  return open;
+}
+
 // ── Cold clients ──────────────────────────────────────────────────────────────
 
 async function fetchDueColdClients() {
@@ -72,7 +99,7 @@ async function fetchDueColdClients() {
   });
 }
 
-async function sendColdBatch(rows: any[]) {
+async function sendColdBatch(rows: any[], connCache: Map<string, boolean>) {
   for (const row of rows) {
     try {
       const client = row.clients ?? {};
@@ -112,6 +139,18 @@ async function sendColdBatch(rows: any[]) {
         .sort((a: any, b: any) => a.position - b.position)
         .map((cpl: any) => cpl.property_links?.link ?? '');
       const formatted = formatMessage(body, client, rawLinks);
+
+      // Pre-flight WhatsApp connection check. cold_clients has no error_detail
+      // column, so on disconnect we postpone the next attempt by 30 min so the
+      // sequence auto-resumes once the agent reconnects.
+      if (!(await isInstanceConnected(instanceName, connCache))) {
+        const nextAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+        await supabase
+          .from('cold_clients')
+          .update({ next_send_at: nextAt })
+          .eq('id', row.id);
+        continue;
+      }
 
       // Randomized jitter before each send — never exactly on the scheduled minute
       await sleep(applyJitter());
@@ -283,7 +322,7 @@ async function maybeCompleteCampaign(campaignId: string) {
   }
 }
 
-async function sendCampaignBatch(rows: CampaignRecipientRow[]) {
+async function sendCampaignBatch(rows: CampaignRecipientRow[], connCache: Map<string, boolean>) {
   // Per product decision: campaigns only skip opted-out clients. Archived
   // clients, missing phones, and 48h-gap violations are all allowed through.
   // (No-phone sends will fail at the Evolution API and be marked failed.)
@@ -329,6 +368,37 @@ async function sendCampaignBatch(rows: CampaignRecipientRow[]) {
         .sort((a: any, b: any) => a.position - b.position)
         .map((cpl: any) => cpl.property_links?.link ?? '');
       const body = formatMessage(campaign.template_body, client as any, rawLinks);
+
+      // Pre-flight WhatsApp connection check. Fail the recipient immediately
+      // with a clear reason instead of letting Evolution return 500 and
+      // burning retries / pausing the entire agent queue.
+      if (!(await isInstanceConnected(instanceName, connCache))) {
+        const nowIso = new Date().toISOString();
+        await supabase
+          .from('campaign_recipients')
+          .update({
+            status: 'failed',
+            error_detail: DISCONNECT_REASON,
+            last_error_at: nowIso,
+          })
+          .eq('id', row.id);
+
+        await supabase
+          .from('campaigns')
+          .update({ failed_count: (campaign.failed_count ?? 0) + 1 })
+          .eq('id', campaign.id);
+
+        // Release the daily-cap slot — a disconnect-failed recipient is not a "sent".
+        try {
+          const day = localYmd(row.scheduled_for);
+          await applyScheduledDelta(agentId, { [day]: -1 });
+        } catch (relErr) {
+          console.error(`[CampaignScheduler] Failed to release quota for recipient ${row.id}:`, relErr);
+        }
+
+        await maybeCompleteCampaign(campaign.id);
+        continue;
+      }
 
       await sleep(applyJitter());
 
@@ -514,7 +584,7 @@ async function fetchNextPendingPerClient() {
   return result;
 }
 
-async function sendBatch(messages: any[]) {
+async function sendBatch(messages: any[], connCache: Map<string, boolean>) {
   for (const msg of messages) {
     try {
       const client = msg.clients ?? {};
@@ -535,6 +605,31 @@ async function sendBatch(messages: any[]) {
         .map((cpl: any) => cpl.property_links?.link ?? '');
       const body  = formatMessage(msg.body, client, rawLinks);
       const phone = client.phone_number ?? '';
+
+      // Pre-flight WhatsApp connection check. Fail the message immediately
+      // with a clear reason instead of letting Evolution return 500 and
+      // burning the retry budget / pausing the entire agent queue.
+      if (!(await isInstanceConnected(instanceName, connCache))) {
+        const nowIso = new Date().toISOString();
+        const { error: updateErr } = await supabase
+          .from('follow_up_messages')
+          .update({
+            status: 'failed',
+            error_detail: DISCONNECT_REASON,
+            last_error_at: nowIso,
+          })
+          .eq('id', msg.id);
+        if (updateErr) console.error(`[Scheduler] Failed to mark message ${msg.id} as disconnected:`, updateErr);
+
+        // Release the daily-cap slot — a disconnect-failed message is not a "sent".
+        try {
+          const day = localYmd(msg.send_at);
+          await applyScheduledDelta(agentId, { [day]: -1 });
+        } catch (relErr) {
+          console.error(`[Scheduler] Failed to release quota for message ${msg.id}:`, relErr);
+        }
+        continue;
+      }
 
       // Randomized jitter — spreads bursts across 5–30s so we never fire the
       // whole batch at the exact cron tick.
@@ -676,25 +771,29 @@ async function tick() {
   if (!_running) return;
 
   try {
+    // Per-tick cache of `instanceName -> connected?`. Each scheduler wake
+    // re-checks Evolution at most once per agent across all three sources.
+    const connCache = new Map<string, boolean>();
+
     // 1. Send regular follow-up messages due right now
     const messages = await fetchPendingDueMessages();
     if (messages.length > 0) {
       console.log(`[Scheduler] Sending ${messages.length} message(s).`);
-      await sendBatch(messages);
+      await sendBatch(messages, connCache);
     }
 
     // 2. Send cold client messages due right now
     const coldRows = await fetchDueColdClients();
     if (coldRows.length > 0) {
       console.log(`[ColdScheduler] Sending ${coldRows.length} cold message(s).`);
-      await sendColdBatch(coldRows);
+      await sendColdBatch(coldRows, connCache);
     }
 
     // 3. Send campaign recipients due right now
     const campaignRows = await fetchDueCampaignRecipients();
     if (campaignRows.length > 0) {
       console.log(`[CampaignScheduler] Sending ${campaignRows.length} campaign message(s).`);
-      await sendCampaignBatch(campaignRows);
+      await sendCampaignBatch(campaignRows, connCache);
     }
 
     // 4. Find when the next message is due
@@ -742,7 +841,7 @@ export async function sendNow(): Promise<{ sent: number }> {
     return { sent: 0 };
   }
   console.log(`[SendNow] Sending ${messages.length} message(s).`);
-  await sendBatch(messages);
+  await sendBatch(messages, new Map<string, boolean>());
   return { sent: messages.length };
 }
 
