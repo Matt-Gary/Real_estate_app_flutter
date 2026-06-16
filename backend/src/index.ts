@@ -13,6 +13,7 @@ for (const key of REQUIRED_ENV) {
 
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
+import path from 'path';
 import { startScheduler, stopScheduler } from './services/scheduler';
 
 import authRoutes         from './routes/auth';
@@ -52,6 +53,20 @@ app.use('/api/property-links',  propertyLinkRoutes);
 app.use('/api/whatsapp',        whatsappRoutes);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// ---- Serve the Flutter web app (single-page app) ----
+// Static assets live in backend/public (a copy of frontend/build/web).
+// __dirname is backend/dist at runtime (npm start) and backend/src under
+// ts-node-dev; '../public' resolves to backend/public in both cases.
+const WEB_DIR = path.join(__dirname, '../public');
+app.use(express.static(WEB_DIR)); // serves /, main.dart.js, assets/*, etc.
+
+// SPA fallback: any non-API GET that didn't match a static file returns
+// index.html, so client-side routes like /reset-password load the app.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(WEB_DIR, 'index.html'));
+});
 
 // Global error handler — catches any unhandled errors in async route handlers
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
